@@ -1,0 +1,130 @@
+.review-results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+}
+
+/* Summary card */
+.review-results__summary-card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-xl);
+  padding: var(--space-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+}
+
+.review-results__meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-md);
+}
+
+.review-results__meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.review-results__meta-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.review-results__meta-value {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--color-on-dark);
+}
+
+/* Score overview */
+.review-results__score-overview {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  background-color: var(--color-surface-elevated);
+  border-radius: var(--rounded-lg);
+}
+
+.review-results__score-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex: 1;
+}
+
+.review-results__avg-score {
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.review-results__avg-score--high {
+  color: var(--color-success);
+}
+
+.review-results__avg-score--mid {
+  color: var(--color-primary);
+}
+
+.review-results__avg-score--low {
+  color: var(--color-danger);
+}
+
+.review-results__avg-score-denom {
+  font-size: 18px;
+  font-weight: 500;
+  opacity: 0.6;
+}
+
+/* Summary text */
+.review-results__summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.review-results__summary-heading {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin: 0;
+}
+
+.review-results__summary-text {
+  font-size: 15px;
+  color: var(--color-body);
+  line-height: 1.7;
+  margin: 0;
+}
+
+/* Categories section */
+.review-results__categories,
+.review-results__framework,
+.review-results__transcript {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.review-results__section-heading {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-on-dark);
+  margin: 0;
+}
+
+.review-results__scores-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-md);
+}

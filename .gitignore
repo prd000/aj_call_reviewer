@@ -1,0 +1,12 @@
+# Environment
+.env
+
+# Project context and docs
+context/
+CLAUDE.md
+
+# Claude Code
+.claude/
+
+# Agent folder
+agent/

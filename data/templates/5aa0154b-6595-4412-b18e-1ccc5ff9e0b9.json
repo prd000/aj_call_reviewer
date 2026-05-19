@@ -1,0 +1,28 @@
+{
+  "name": "Patrick Template",
+  "criteria": [
+    {
+      "id": "ebe94ced-543b-4979-a959-0106b094aa90",
+      "description": "The advisor should find deep pain points for the prospect to solve. I use a framework of level 1, level 2, and level 3 pain. - Level 1 pain, for example, could be \"I want to save money on taxes.\" - Level 2 would be \"I want to save money on taxes because it's digging into my income and I don't want to have to go back to work because I already retired.\" - Level 3 pain would be \"I want to save money on taxes because it's digging into my income and I don't want to have to go back to work because my grandparents worked for my entire childhood and I watched them literally work until the day they died. I never got to spend any time with them and that's not what I want for my grandkids.\" The advisor should never accept a level one answer without digging into it immediately. If they don't dig into it immediately, they definitely need to circle back and touch on that later in the conversation. They should get a minimum of level two pain. If they get level three pain, this is a nine or ten out of ten",
+      "success_condition": "The advisor identified pain points at level one and understood that that was an indicator to dig deeper. They dug deeper into those points and got level two or level three pain. - If they accepted level one answers, this is a three or lower. - If they asked more questions but didn't get satisfying answers, this is a five or lower. - If they identify level one pain, ask questions, and got level two, this is an eight or lower. - Or if they got all the way to level three, this is a nine or a ten."
+    },
+    {
+      "id": "3d4d21a4-ec5e-4525-9fd1-0fd13c79e842",
+      "description": "The advisor should confidently inform the prospect of next steps in the sales process and frame it in such a way that taking those next steps is tied to the prospect solving problems or getting what they want. The advisor should make the transition to the next step in the sales process, booking the next call, as seamless as possible. The advisor should always get a call on the calendar with an invitation sent to the prospect. The advisor should never get off the phone without proposing a next step at the very least and if the prospect agrees to the next step, the advisor should never accept ending the conversation without scheduling that next step",
+      "success_condition": "The advisor confidently explained the next steps, explained the benefits that the prospect would get from those next steps, or framed it in such a way that the prospect understands this is to help them, and then scheduled the next meeting with a time, date, and invitation sent"
+    },
+    {
+      "id": "219cb3d5-f25b-472d-beed-855692eb9e2c",
+      "description": "The advisor should avoid discussing fees on the first call because they have not had the opportunity to present any value yet. Talking about pricing before receiving value consistently leads to objections. If asked about fees, the advisor should deflect the question. If pushed on that deflection, the advisor should give a broad range with the caveat that fees are dependent on what solutions make the most sense. Before they can prescribe any solutions, they must first understand problems and transition back into having a conversation about the outcomes that the prospect wants",
+      "success_condition": "The advisor does not discuss fees"
+    },
+    {
+      "id": "de51ca63-0efd-4e56-88a3-39fbd65321d2",
+      "description": "The advisor should never feature sell, which is defined as talking a lot about products or services that they can offer or how their firm is different without understanding what the prospect is looking for. This is an approach of throwing things at the wall and seeing what sticks and does not effectively close deals. The advisor should always ask the prospect what they are looking for or what outcomes they want and ask them to clearly define what those outcomes look like. What does success look like? What does failure look like? Speak to these specific outcomes that the prospect is looking for rather than blindly talking about features",
+      "success_condition": "The advisor only talks about features or products that are directly relevant to outcomes that the prospect has defined. To be very clear here this is not about problems that they have; it is about outcomes that they want. Instead of a prospect saying that they want to save money on taxes and the advisor recommending some tax-efficient investment vehicles, what should happen instead is the advisor should ask questions about: - why they want to save money on taxes - what they would like to do with that money instead - what an ideal outcome looks like - what a failure mode outcome looks like and then make recommendations based off of exactly what the prospect described to them"
+    }
+  ],
+  "id": "5aa0154b-6595-4412-b18e-1ccc5ff9e0b9",
+  "created_at": "2026-05-14T19:50:36.403556+00:00",
+  "updated_at": "2026-05-14T19:50:36.403556+00:00"
+}

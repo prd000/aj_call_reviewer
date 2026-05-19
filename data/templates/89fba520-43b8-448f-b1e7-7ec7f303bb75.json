@@ -1,0 +1,28 @@
+{
+  "name": "Rudimentary",
+  "criteria": [
+    {
+      "id": "a65ccb05-f1a3-45fb-81d7-97dfa85f2036",
+      "description": "Rapport building: assess whether the advisor opened with a warm personalized greeting, used the prospect's name naturally, showed genuine interest in the prospect's situation before moving to business, mirrored the prospect's tone and energy, created moments of authentic connection, and listened actively before responding.",
+      "success_condition": "The advisor created a genuinely comfortable and trusting atmosphere. The prospect opened up freely, there were multiple natural moments of connection, and the advisor consistently listened and acknowledged before responding. Score 9–10 for exceptional warmth; 1–2 for cold or dismissive tone with no attempt to connect."
+    },
+    {
+      "id": "dc71da13-2721-4733-badd-9be65f147609",
+      "description": "Needs discovery: assess whether the advisor asked open-ended questions, uncovered the prospect's current financial situation (assets, accounts, income), identified the prospect's goals and desired outcomes, uncovered fears and pain points, explored timeline and urgency, listened more than they talked, and asked follow-up questions that deepened understanding.",
+      "success_condition": "The advisor comprehensively uncovered the prospect's current situation, goals, fears, and timeline. The prospect felt heard. The advisor asked more questions than they made statements and dug deeper on key concerns. Score 9–10 for comprehensive discovery; 1–2 for launching into a pitch with no discovery."
+    },
+    {
+      "id": "2e8991f2-de12-4b19-9f72-cf2afb22118c",
+      "description": "Solution presentation: assess whether the advisor tied the solution directly to the needs the prospect expressed, explained it in plain language, used concrete examples or case studies, clearly articulated the value proposition for this specific prospect, avoided unexplained jargon, presented with confidence, and kept the presentation appropriately concise.",
+      "success_condition": "The solution was clearly connected to the prospect's specific situation, compelling, and easy to understand. The advisor used concrete examples and tied everything back to what the prospect said they cared about. Score 9–10 for highly tailored and clear presentation; 1–2 for no real solution presented or an irrelevant one."
+    },
+    {
+      "id": "0018e888-b024-4a16-824b-708579aa9f3d",
+      "description": "Objection handling: assess whether the advisor acknowledged objections before responding, asked clarifying questions to understand the root of the objection, responded with empathy and without defensiveness, provided specific relevant answers, proactively surfaced common concerns before they arose, turned objections into opportunities to reinforce value, and maintained confidence after handling an objection.",
+      "success_condition": "All objections were handled with empathy, specificity, and confidence. The advisor proactively surfaced and addressed common concerns before they became objections, and turned each objection into an opportunity to reinforce value. Score 9–10 for masterful handling; 1–2 for ignored or trust-damaging responses."
+    }
+  ],
+  "id": "89fba520-43b8-448f-b1e7-7ec7f303bb75",
+  "created_at": "2026-05-14T14:13:21.526354+00:00",
+  "updated_at": "2026-05-14T14:40:42.691400+00:00"
+}
