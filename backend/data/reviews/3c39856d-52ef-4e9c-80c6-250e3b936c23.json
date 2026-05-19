@@ -1,0 +1,114 @@
+{
+  "id": "3c39856d-52ef-4e9c-80c6-250e3b936c23",
+  "created_at": "2026-05-14T13:35:34.948385+00:00",
+  "status": "complete",
+  "metadata": {
+    "advisor_name": "Jay Mehta",
+    "firm": "Veraz Advisors",
+    "prospect_name": "Steve Autio",
+    "bds_rep": "Patrick Dineen",
+    "original_filename": "0561816b-35d8-450d-b19e-ef273495f96d.wav"
+  },
+  "transcript": [
+    {
+      "timestamp": "00:00:05",
+      "text": "Hi there, thanks for making time today. How are you doing?",
+      "speaker": 0
+    },
+    {
+      "timestamp": "00:00:12",
+      "text": "I'm doing well, thank you. I appreciate you reaching out.",
+      "speaker": 1
+    },
+    {
+      "timestamp": "00:00:18",
+      "text": "Of course. I wanted to talk with you today about your retirement planning goals and see if we can be of service.",
+      "speaker": 0
+    },
+    {
+      "timestamp": "00:00:30",
+      "text": "That sounds good. I've been thinking about this for a while actually.",
+      "speaker": 1
+    },
+    {
+      "timestamp": "00:00:38",
+      "text": "Great. Can you tell me a bit about where you are today? Do you have any existing retirement accounts?",
+      "speaker": 0
+    },
+    {
+      "timestamp": "00:00:50",
+      "text": "Yes, I have a 401k from my current employer and an old IRA from a previous job.",
+      "speaker": 1
+    },
+    {
+      "timestamp": "00:01:02",
+      "text": "That's a solid starting point. Do you have a sense of what your target retirement age is?",
+      "speaker": 0
+    },
+    {
+      "timestamp": "00:01:14",
+      "text": "Ideally somewhere around 62, maybe 65 at the latest.",
+      "speaker": 1
+    },
+    {
+      "timestamp": "00:01:22",
+      "text": "That gives us a good runway. One of the things I'd like to explore with you is a comprehensive income strategy that bridges any gap between retirement and Social Security.",
+      "speaker": 0
+    },
+    {
+      "timestamp": "00:01:40",
+      "text": "That's actually something I've been worried about. I don't fully understand how Social Security will fit in.",
+      "speaker": 1
+    },
+    {
+      "timestamp": "00:01:52",
+      "text": "That's a very common concern and one we can absolutely address. We have a planning process specifically for that.",
+      "speaker": 0
+    },
+    {
+      "timestamp": "00:02:05",
+      "text": "That would be reassuring to understand better.",
+      "speaker": 1
+    },
+    {
+      "timestamp": "00:02:12",
+      "text": "Absolutely. Based on what you've shared, I think there are a few options we should walk through. Can we schedule a follow-up for next week?",
+      "speaker": 0
+    },
+    {
+      "timestamp": "00:02:25",
+      "text": "Yes, that works for me. Thursday afternoon would be best.",
+      "speaker": 1
+    },
+    {
+      "timestamp": "00:02:32",
+      "text": "Perfect. I'll send a calendar invite. Looking forward to diving deeper with you.",
+      "speaker": 0
+    }
+  ],
+  "review": {
+    "summary": "This was a solid introductory call that demonstrated good fundamentals in rapport building and needs discovery. The advisor asked thoughtful open-ended questions and listened actively to the prospect's concerns about retirement planning. There is room to improve on solution presentation specificity and to address objections more proactively before they arise.",
+    "categories": [
+      {
+        "name": "Rapport Building",
+        "score": 8,
+        "feedback": "The advisor opened warmly and created a comfortable atmosphere for the prospect to share openly. Good use of affirmations and acknowledgment of the prospect's existing effort. Consider personalizing the opening with a specific reference to something you know about the prospect's situation."
+      },
+      {
+        "name": "Needs Discovery",
+        "score": 7,
+        "feedback": "Strong questioning technique with good use of open-ended questions about retirement timeline and existing accounts. The advisor uncovered the prospect's Social Security gap concern organically. Dig deeper on income needs and current lifestyle expectations to sharpen the planning picture."
+      },
+      {
+        "name": "Solution Presentation",
+        "score": 6,
+        "feedback": "The advisor referenced a 'comprehensive income strategy' but didn't elaborate on specifics or make it tangible for the prospect. Present at least one concrete example or case study to illustrate the solution. Tie the solution directly back to the Social Security gap concern the prospect raised."
+      },
+      {
+        "name": "Objection Handling",
+        "score": 5,
+        "feedback": "No direct objections were raised in this call, so the advisor did not have a chance to demonstrate objection handling skills. Proactively surface and address common concerns \u2014 fee transparency, risk tolerance, and liquidity \u2014 before the prospect raises them to build trust and demonstrate expertise."
+      }
+    ]
+  }
+}

@@ -1,0 +1,193 @@
+.upload-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.upload-form__fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-md);
+}
+
+.upload-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.upload-form__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-body);
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.upload-form__label-optional {
+  font-weight: 400;
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--color-muted);
+}
+
+.upload-form__input {
+  height: 44px;
+  padding: 0 var(--space-md);
+  background-color: var(--color-surface-elevated);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-md);
+  color: var(--color-on-dark);
+  font-size: 14px;
+  font-family: var(--font-family);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  outline: none;
+}
+
+.upload-form__input::placeholder {
+  color: var(--color-muted);
+}
+
+.upload-form__input:focus {
+  border-color: var(--color-info);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+}
+
+.upload-form__input--error {
+  border-color: var(--color-danger);
+}
+
+.upload-form__input--error:focus {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 2px rgba(246, 70, 93, 0.25);
+}
+
+.upload-form__input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.upload-form__error {
+  font-size: 12px;
+  color: var(--color-danger);
+  margin-top: 2px;
+}
+
+.upload-form__dropzone {
+  min-height: 120px;
+  background-color: var(--color-surface-elevated);
+  border: 1px dashed var(--color-hairline);
+  border-radius: var(--rounded-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+  padding: var(--space-lg);
+  position: relative;
+}
+
+.upload-form__dropzone:hover {
+  border-color: var(--color-primary);
+  background-color: rgba(252, 213, 53, 0.04);
+}
+
+.upload-form__dropzone--active {
+  border-color: var(--color-primary);
+  background-color: rgba(252, 213, 53, 0.08);
+}
+
+.upload-form__dropzone--error {
+  border-color: var(--color-danger);
+}
+
+.upload-form__dropzone--has-file {
+  border-style: solid;
+  border-color: var(--color-success);
+  background-color: rgba(14, 203, 129, 0.05);
+}
+
+.upload-form__file-input {
+  display: none;
+}
+
+.upload-form__dropzone-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+  pointer-events: none;
+}
+
+.upload-form__upload-icon {
+  font-size: 32px;
+  color: var(--color-muted);
+  line-height: 1;
+}
+
+.upload-form__dropzone-text {
+  font-size: 14px;
+  color: var(--color-body);
+}
+
+.upload-form__browse-link {
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.upload-form__dropzone-hint {
+  font-size: 12px;
+  color: var(--color-muted);
+}
+
+.upload-form__file-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  pointer-events: none;
+}
+
+.upload-form__file-icon {
+  font-size: 28px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.upload-form__file-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-on-dark);
+  word-break: break-all;
+}
+
+.upload-form__file-size {
+  font-size: 12px;
+  color: var(--color-muted);
+  margin-top: 2px;
+}
+
+.upload-form__submit {
+  height: 44px;
+  padding: 0 var(--space-xl);
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: var(--rounded-md);
+  border: none;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), opacity var(--transition-fast);
+  align-self: flex-start;
+  min-width: 180px;
+}
+
+.upload-form__submit:hover:not(:disabled) {
+  background-color: var(--color-primary-active);
+}
+
+.upload-form__submit:disabled {
+  background-color: var(--color-primary-disabled);
+  color: var(--color-muted);
+  cursor: not-allowed;
+}

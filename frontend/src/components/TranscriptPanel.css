@@ -1,0 +1,119 @@
+.transcript-panel {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-xl);
+  overflow: hidden;
+}
+
+.transcript-panel__toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-md) var(--space-lg);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-on-dark);
+  font-size: 15px;
+  font-weight: 600;
+  font-family: var(--font-family);
+  transition: background-color var(--transition-fast);
+  text-align: left;
+}
+
+.transcript-panel__toggle:hover {
+  background-color: var(--color-surface-elevated);
+}
+
+.transcript-panel__toggle-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.transcript-panel__count {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--color-muted);
+}
+
+.transcript-panel__chevron {
+  font-size: 18px;
+  color: var(--color-muted);
+  line-height: 1;
+  transition: transform var(--transition-base);
+  display: inline-block;
+}
+
+.transcript-panel__chevron--open {
+  transform: rotate(180deg);
+}
+
+.transcript-panel__content {
+  max-height: 400px;
+  overflow-y: auto;
+  border-top: 1px solid var(--color-hairline);
+  padding: var(--space-md) 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-surface-elevated) transparent;
+}
+
+.transcript-panel__content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.transcript-panel__content::-webkit-scrollbar-thumb {
+  background-color: var(--color-surface-elevated);
+  border-radius: var(--rounded-pill);
+}
+
+.transcript-panel__segment {
+  display: flex;
+  gap: var(--space-md);
+  padding: var(--space-xs) var(--space-lg);
+  line-height: 1.6;
+  transition: background-color var(--transition-fast);
+}
+
+.transcript-panel__segment:hover {
+  background-color: var(--color-surface-elevated);
+}
+
+.transcript-panel__timestamp {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-primary);
+  font-family: 'Courier New', Courier, monospace;
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding-top: 2px;
+  min-width: 60px;
+}
+
+.transcript-panel__text {
+  font-size: 14px;
+  color: var(--color-body);
+  line-height: 1.6;
+}
+
+.transcript-panel__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xxs);
+  min-width: 0;
+}
+
+.transcript-panel__speaker {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-family);
+  color: var(--color-on-primary);
+  background-color: var(--color-primary-active);
+  border-radius: var(--rounded-sm);
+  padding: 1px var(--space-xs);
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+  align-self: flex-start;
+}
