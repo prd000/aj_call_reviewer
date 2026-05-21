@@ -1,5 +1,8 @@
 import os
+import json as _json
 import logging
+from langchain_core.messages import HumanMessage, SystemMessage
+from modules.llm_config import get_llm, get_llm_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -84,11 +87,11 @@ def identify_speakers(transcript: list[dict]) -> dict:
     which speaker index is the advisor and which is the prospect.
 
     Returns a dict mapping speaker int to role label, e.g. {0: "Advisor", 1: "Prospect"}.
-    Returns an empty dict if identification fails or DEEPSEEK_API_KEY is absent.
+    Returns an empty dict if identification fails or the LLM API key is absent.
     """
-    api_key = os.environ.get("DEEPSEEK_API_KEY", "").strip()
+    api_key = get_llm_api_key()
     if not api_key:
-        logger.warning("DEEPSEEK_API_KEY not set; skipping speaker identification.")
+        logger.warning("LLM API key not set; skipping speaker identification.")
         return {}
 
     sample = [seg for seg in transcript[:10] if seg.get("speaker") is not None]
@@ -98,17 +101,7 @@ def identify_speakers(transcript: list[dict]) -> dict:
         return {}
 
     try:
-        import json as _json
-        from langchain_openai import ChatOpenAI
-        from langchain_core.messages import HumanMessage, SystemMessage
-
-        model_name = os.environ.get("LLM_MODEL", "deepseek-chat")
-        llm = ChatOpenAI(
-            model=model_name,
-            api_key=api_key,
-            base_url="https://api.deepseek.com",
-            temperature=0.0,
-        )
+        llm = get_llm(temperature=0.0)
 
         sample_text = "\n".join(
             f"[Speaker {seg['speaker']}] {seg['text']}" for seg in sample
@@ -157,7 +150,7 @@ def review_call(transcript: list[dict], criteria: list[dict]) -> dict:
     One LLM call is made per criterion; results are assembled into a scored
     category list with an overall summary.
 
-    Falls back to stub data when DEEPSEEK_API_KEY is absent or criteria is empty.
+    Falls back to stub data when the LLM API key is absent or criteria is empty.
 
     Returns:
         {
@@ -168,10 +161,10 @@ def review_call(transcript: list[dict], criteria: list[dict]) -> dict:
             ]
         }
     """
-    api_key = os.environ.get("DEEPSEEK_API_KEY", "").strip()
+    api_key = get_llm_api_key()
 
     if not api_key:
-        logger.warning("DEEPSEEK_API_KEY is not set. Returning stub review for development.")
+        logger.warning("LLM API key is not set. Returning stub review for development.")
         return STUB_REVIEW
 
     if not criteria:
@@ -179,17 +172,7 @@ def review_call(transcript: list[dict], criteria: list[dict]) -> dict:
         return STUB_REVIEW
 
     try:
-        import json as _json
-        from langchain_openai import ChatOpenAI
-        from langchain_core.messages import HumanMessage, SystemMessage
-
-        model_name = os.environ.get("LLM_MODEL", "deepseek-chat")
-        llm = ChatOpenAI(
-            model=model_name,
-            api_key=api_key,
-            base_url="https://api.deepseek.com",
-            temperature=0.3,
-        )
+        llm = get_llm(temperature=0.3)
 
         transcript_text = _format_transcript(transcript)
         categories = []

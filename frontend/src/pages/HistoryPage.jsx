@@ -8,12 +8,23 @@ export default function HistoryPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   const [filterRep, setFilterRep] = useState('')
+  const [filterFirm, setFilterFirm] = useState('')
+  const [filterAdvisor, setFilterAdvisor] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
 
   const repOptions = useMemo(() => {
-    const reps = reviews
-      .map((r) => r.metadata?.bds_rep)
-      .filter(Boolean)
+    const reps = reviews.map((r) => r.metadata?.bds_rep).filter(Boolean)
     return [...new Set(reps)].sort()
+  }, [reviews])
+
+  const firmOptions = useMemo(() => {
+    const firms = reviews.map((r) => r.metadata?.firm).filter(Boolean)
+    return [...new Set(firms)].sort()
+  }, [reviews])
+
+  const advisorOptions = useMemo(() => {
+    const advisors = reviews.map((r) => r.metadata?.advisor_name).filter(Boolean)
+    return [...new Set(advisors)].sort()
   }, [reviews])
 
   async function handleDelete(id) {
@@ -76,27 +87,90 @@ export default function HistoryPage() {
           </div>
         )}
 
-        {!isLoading && !error && repOptions.length > 0 && (
-          <div className="history-page__filter">
-            <label htmlFor="rep-filter" className="history-page__filter-label">
-              BDS Rep
-            </label>
-            <select
-              id="rep-filter"
-              className="history-page__filter-select"
-              value={filterRep}
-              onChange={(e) => setFilterRep(e.target.value)}
-            >
-              <option value="">All</option>
-              {repOptions.map((rep) => (
-                <option key={rep} value={rep}>{rep}</option>
-              ))}
-            </select>
+        {!isLoading && !error && reviews.length > 0 && (
+          <div className="history-page__filters">
+            <div className="history-page__filter">
+              <label htmlFor="search-filter" className="history-page__filter-label">
+                Search
+              </label>
+              <input
+                id="search-filter"
+                type="text"
+                className="history-page__search"
+                placeholder="Advisor, firm, prospect…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+
+            {advisorOptions.length > 0 && (
+              <div className="history-page__filter">
+                <label htmlFor="advisor-filter" className="history-page__filter-label">
+                  Advisor
+                </label>
+                <select
+                  id="advisor-filter"
+                  className="history-page__filter-select"
+                  value={filterAdvisor}
+                  onChange={(e) => setFilterAdvisor(e.target.value)}
+                >
+                  <option value="">All</option>
+                  {advisorOptions.map((a) => (
+                    <option key={a} value={a}>{a}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {firmOptions.length > 0 && (
+              <div className="history-page__filter">
+                <label htmlFor="firm-filter" className="history-page__filter-label">
+                  Firm
+                </label>
+                <select
+                  id="firm-filter"
+                  className="history-page__filter-select"
+                  value={filterFirm}
+                  onChange={(e) => setFilterFirm(e.target.value)}
+                >
+                  <option value="">All</option>
+                  {firmOptions.map((f) => (
+                    <option key={f} value={f}>{f}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {repOptions.length > 0 && (
+              <div className="history-page__filter">
+                <label htmlFor="rep-filter" className="history-page__filter-label">
+                  BDS Rep
+                </label>
+                <select
+                  id="rep-filter"
+                  className="history-page__filter-select"
+                  value={filterRep}
+                  onChange={(e) => setFilterRep(e.target.value)}
+                >
+                  <option value="">All</option>
+                  {repOptions.map((rep) => (
+                    <option key={rep} value={rep}>{rep}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         )}
 
         {!isLoading && !error && (
-          <ReviewList reviews={reviews} filterRep={filterRep} onDelete={handleDelete} />
+          <ReviewList
+            reviews={reviews}
+            filterRep={filterRep}
+            filterFirm={filterFirm}
+            filterAdvisor={filterAdvisor}
+            searchQuery={searchQuery}
+            onDelete={handleDelete}
+          />
         )}
       </div>
     </div>

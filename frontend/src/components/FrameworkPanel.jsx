@@ -18,10 +18,9 @@ export default function FrameworkPanel({ framework }) {
       <div className="framework-panel__criteria-list">
         {criteria.map((criterion, index) => (
           <div key={criterion.id || index} className="framework-panel__criterion">
-            {criterion.title && (
-              <h3 className="framework-panel__criterion-title">{criterion.title}</h3>
-            )}
-            <p className="framework-panel__criterion-description">{criterion.description}</p>
+            <h3 className="framework-panel__criterion-title">
+              {criterion.title || criterion.description}
+            </h3>
             {criterion.success_condition && (
               <div className="framework-panel__success-block">
                 <span className="framework-panel__success-label">Success Condition</span>

@@ -12,6 +12,7 @@ router = APIRouter()
 
 class CriterionBody(BaseModel):
     id: str | None = None
+    title: str | None = None
     description: str
     success_condition: str
 
@@ -35,16 +36,20 @@ def get_templates():
     ]
 
 
+def _criterion_dict(c: CriterionBody) -> dict:
+    d = {
+        "id": c.id or str(uuid.uuid4()),
+        "description": c.description,
+        "success_condition": c.success_condition,
+    }
+    if c.title is not None:
+        d["title"] = c.title
+    return d
+
+
 @router.post("/templates", status_code=201)
 def create_template(body: TemplateBody):
-    criteria = [
-        {
-            "id": c.id or str(uuid.uuid4()),
-            "description": c.description,
-            "success_condition": c.success_condition,
-        }
-        for c in (body.criteria or [])
-    ]
+    criteria = [_criterion_dict(c) for c in (body.criteria or [])]
     template = {"name": body.name or "", "criteria": criteria}
     return save_template(template)
 
@@ -65,14 +70,7 @@ def update_template(template_id: str, body: TemplateBody):
     if body.name is not None:
         template["name"] = body.name
     if body.criteria is not None:
-        template["criteria"] = [
-            {
-                "id": c.id or str(uuid.uuid4()),
-                "description": c.description,
-                "success_condition": c.success_condition,
-            }
-            for c in body.criteria
-        ]
+        template["criteria"] = [_criterion_dict(c) for c in body.criteria]
     return save_template(template)
 
 
