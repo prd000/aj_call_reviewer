@@ -35,6 +35,7 @@ function getAverageScoreClass(score) {
 export default function ReviewResults({ review }) {
   const { metadata, review: reviewData, transcript, speaker_map, framework, created_at } = review
   const categories = reviewData?.categories || []
+  const frameworkCriteria = framework?.criteria || []
   const summary = reviewData?.summary || ''
   const avgScore = getAverageScore(categories)
 
@@ -84,14 +85,17 @@ export default function ReviewResults({ review }) {
         <section className="review-results__categories">
           <h2 className="review-results__section-heading">Category Scores</h2>
           <div className="review-results__scores-grid">
-            {categories.map((category) => (
-              <ScoreCard
-                key={category.name}
-                name={category.name}
-                score={category.score}
-                feedback={category.feedback}
-              />
-            ))}
+            {categories.map((category, index) => {
+              const criterionTitle = frameworkCriteria[index]?.title
+              return (
+                <ScoreCard
+                  key={category.name}
+                  name={criterionTitle || category.name}
+                  score={category.score}
+                  feedback={category.feedback}
+                />
+              )
+            })}
           </div>
         </section>
       )}

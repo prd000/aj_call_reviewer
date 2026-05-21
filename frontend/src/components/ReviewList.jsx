@@ -131,12 +131,25 @@ function ReviewListItem({ review, onClick, onDelete }) {
   )
 }
 
-export default function ReviewList({ reviews, filterRep, onDelete }) {
+export default function ReviewList({ reviews, filterRep, filterFirm, filterAdvisor, searchQuery, onDelete }) {
   const navigate = useNavigate()
 
-  const filtered = filterRep
-    ? reviews.filter((r) => r.metadata?.bds_rep === filterRep)
-    : reviews
+  const filtered = reviews.filter((r) => {
+    if (filterRep && r.metadata?.bds_rep !== filterRep) return false
+    if (filterFirm && r.metadata?.firm !== filterFirm) return false
+    if (filterAdvisor && r.metadata?.advisor_name !== filterAdvisor) return false
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase()
+      const searchable = [
+        r.metadata?.advisor_name,
+        r.metadata?.firm,
+        r.metadata?.prospect_name,
+        r.metadata?.bds_rep,
+      ].filter(Boolean).join(' ').toLowerCase()
+      if (!searchable.includes(q)) return false
+    }
+    return true
+  })
 
   const sorted = [...filtered].sort(
     (a, b) => new Date(b.created_at) - new Date(a.created_at)
@@ -156,9 +169,9 @@ export default function ReviewList({ reviews, filterRep, onDelete }) {
   if (sorted.length === 0) {
     return (
       <div className="review-list__empty">
-        <p className="review-list__empty-title">No reviews for this BDS Rep</p>
+        <p className="review-list__empty-title">No matching reviews</p>
         <p className="review-list__empty-text">
-          Try selecting a different rep or clearing the filter.
+          Try adjusting your filters or search query.
         </p>
       </div>
     )
