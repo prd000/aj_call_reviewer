@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import UploadForm from '../components/UploadForm'
 import TemplateManager from '../components/TemplateManager'
-import { uploadCall, processReview } from '../services/api'
+import { uploadCall } from '../services/api'
 import './UploadPage.css'
 
 export default function UploadPage() {
@@ -28,28 +28,13 @@ export default function UploadPage() {
     setIsLoading(true)
     setError(null)
 
-    let reviewId
     try {
-      const { id } = await uploadCall(formData)
-      reviewId = id
+      formData.append('template_id', activeTemplateId)
+      await uploadCall(formData)
+      navigate('/history')
     } catch (err) {
       setError(err.message || 'Failed to upload the recording. Please try again.')
       setIsLoading(false)
-      return
-    }
-
-    // Navigate to processing page immediately so the user sees progress feedback
-    navigate(`/processing/${reviewId}`)
-
-    // Fire processing in the background — ProcessingPage will poll for completion
-    try {
-      await processReview(reviewId, {
-        criteria: activeCriteria,
-        template_name: activeTemplateName,
-        template_id: activeTemplateId,
-      })
-    } catch {
-      // ProcessingPage polls status and will show the error state
     }
   }
 

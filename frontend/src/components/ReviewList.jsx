@@ -2,6 +2,13 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import './ReviewList.css'
 
+const IN_PROGRESS_STATUSES = ['pending', 'transcribing', 'reviewing']
+const STATUS_LABELS = {
+  pending: 'Queued',
+  transcribing: 'Transcribing…',
+  reviewing: 'Reviewing…',
+}
+
 function formatDate(isoString) {
   if (!isoString) return '—'
   try {
@@ -40,6 +47,10 @@ function ReviewListItem({ review, onClick, onDelete }) {
   const [showConfirm, setShowConfirm] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
 
+  const isInProgress = IN_PROGRESS_STATUSES.includes(status)
+  const isFailed = status === 'failed'
+  const isInteractive = !isInProgress && !isFailed
+
   function handleDeleteClick(e) {
     e.stopPropagation()
     setShowConfirm(true)
@@ -61,19 +72,24 @@ function ReviewListItem({ review, onClick, onDelete }) {
     }
   }
 
+  let itemClass = 'review-list-item'
+  if (isInProgress) itemClass += ' review-list-item--in-progress'
+  if (isFailed) itemClass += ' review-list-item--failed'
+  if (showConfirm) itemClass += ' review-list-item--confirming'
+
   return (
     <div
-      className={`review-list-item${showConfirm ? ' review-list-item--confirming' : ''}`}
-      onClick={showConfirm ? undefined : onClick}
-      role="button"
-      tabIndex={0}
+      className={itemClass}
+      onClick={isInteractive && !showConfirm ? onClick : undefined}
+      role={isInteractive ? 'button' : undefined}
+      tabIndex={isInteractive ? 0 : undefined}
       onKeyDown={(e) => {
-        if (!showConfirm && (e.key === 'Enter' || e.key === ' ')) {
+        if (isInteractive && !showConfirm && (e.key === 'Enter' || e.key === ' ')) {
           e.preventDefault()
-          onClick()
+          onClick?.()
         }
       }}
-      aria-label={`View review for ${metadata?.advisor_name} — ${metadata?.prospect_name}`}
+      aria-label={`${isInteractive ? 'View review' : 'Review'} for ${metadata?.advisor_name} — ${metadata?.prospect_name}`}
     >
       <div className="review-list-item__body">
         <div className="review-list-item__primary">
@@ -108,15 +124,25 @@ function ReviewListItem({ review, onClick, onDelete }) {
             Cancel
           </button>
         </div>
+      ) : isInProgress ? (
+        <div className="review-list-item__right">
+          <div className="review-list-item__spinner" aria-hidden="true" />
+          <span className="review-list-item__status-label">{STATUS_LABELS[status] || status}</span>
+        </div>
+      ) : isFailed ? (
+        <div className="review-list-item__right">
+          <span className="review-list-item__badge review-list-item__badge--failed">Failed</span>
+          <button
+            className="review-list-item__delete-btn review-list-item__delete-btn--visible"
+            onClick={handleDeleteClick}
+            aria-label={`Delete review for ${metadata?.advisor_name}`}
+          >
+            <TrashIcon />
+          </button>
+        </div>
       ) : (
         <div className="review-list-item__right">
-          {status === 'processing' ? (
-            <span className="review-list-item__badge review-list-item__badge--processing">Processing</span>
-          ) : status === 'error' ? (
-            <span className="review-list-item__badge review-list-item__badge--error">Error</span>
-          ) : (
-            <ScoreBadge score={overall_score} />
-          )}
+          <ScoreBadge score={overall_score} />
           <button
             className="review-list-item__delete-btn"
             onClick={handleDeleteClick}
@@ -183,7 +209,7 @@ export default function ReviewList({ reviews, filterRep, filterFirm, filterAdvis
         <ReviewListItem
           key={review.id}
           review={review}
-          onClick={() => navigate(`/results/${review.id}`)}
+          onClick={review.status === 'complete' ? () => navigate(`/results/${review.id}`) : undefined}
           onDelete={onDelete}
         />
       ))}

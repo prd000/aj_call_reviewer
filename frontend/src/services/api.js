@@ -35,15 +35,6 @@ export async function listReviews() {
   return handleResponse(response)
 }
 
-export async function processReview(id, body) {
-  const response = await fetch(`${BASE_URL}/reviews/${id}/process`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  return handleResponse(response)
-}
-
 export async function listTemplates() {
   const response = await fetch(`${BASE_URL}/templates`)
   return handleResponse(response)

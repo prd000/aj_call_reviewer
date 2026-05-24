@@ -53,10 +53,11 @@ def _parse_monologues(monologues) -> list[dict]:
     return segments
 
 
-def transcribe(file_path: Path) -> list[dict]:
+def transcribe(source: Path | str) -> list[dict]:
     """
     Transcribe an audio/video file using the Rev.ai API with speaker diarization.
 
+    Accepts either a local file Path or an HTTP/HTTPS URL (e.g. a Supabase signed URL).
     Returns a list of dicts with keys: 'timestamp' (HH:MM:SS), 'text', and
     'speaker' (int, 0-indexed). One segment is produced per speaker turn.
 
@@ -77,8 +78,13 @@ def transcribe(file_path: Path) -> list[dict]:
 
         client = apiclient.RevAiAPIClient(access_token)
 
-        logger.info("Submitting transcription job to Rev.ai for file: %s", file_path)
-        job = client.submit_job_local_file(str(file_path))
+        is_url = isinstance(source, str) and source.startswith(("http://", "https://"))
+        if is_url:
+            logger.info("Submitting transcription job to Rev.ai for URL (first 60 chars): %s", str(source)[:60])
+            job = client.submit_job_url(str(source))
+        else:
+            logger.info("Submitting transcription job to Rev.ai for file: %s", source)
+            job = client.submit_job_local_file(str(source))
         job_id = job.id
         logger.info("Rev.ai job submitted. Job ID: %s", job_id)
 

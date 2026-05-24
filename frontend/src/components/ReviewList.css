@@ -215,6 +215,60 @@
   background-color: var(--color-hairline);
 }
 
+/* In-progress state — no interaction at all */
+.review-list-item--in-progress {
+  cursor: default;
+  pointer-events: none;
+}
+
+.review-list-item--in-progress:hover {
+  background-color: var(--color-surface);
+  border-color: var(--color-hairline);
+}
+
+/* Failed state — clickable buttons only, no card navigation */
+.review-list-item--failed {
+  cursor: default;
+}
+
+.review-list-item--failed:hover {
+  background-color: var(--color-surface);
+  border-color: var(--color-hairline);
+}
+
+/* Always-visible delete button modifier (for failed items) */
+.review-list-item__delete-btn--visible {
+  opacity: 1 !important;
+}
+
+/* Spinner for in-progress rows */
+.review-list-item__spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-hairline);
+  border-top-color: var(--color-info);
+  border-radius: 50%;
+  animation: rl-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes rl-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Status label for in-progress rows */
+.review-list-item__status-label {
+  font-size: 12px;
+  color: var(--color-info);
+  white-space: nowrap;
+}
+
+/* Failed badge */
+.review-list-item__badge--failed {
+  color: var(--color-danger);
+  background-color: rgba(246, 70, 93, 0.12);
+}
+
 /* Empty state */
 .review-list__empty {
   display: flex;
