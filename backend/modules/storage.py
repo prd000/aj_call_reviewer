@@ -3,6 +3,7 @@ from modules.supabase_client import get_client
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 RECORDINGS_DIR = DATA_DIR / "recordings"
+STORAGE_BUCKET = "recordings"
 
 
 def _ensure_recordings_dir() -> None:
@@ -24,6 +25,9 @@ def _to_row(review: dict) -> dict:
         "transcript": review.get("transcript"),
         "review_results": review.get("review"),
         "framework": review.get("framework"),
+        "error_message": review.get("error_message"),
+        "storage_path": review.get("storage_path"),
+        "celery_task_id": review.get("celery_task_id"),
     }
 
 
@@ -43,6 +47,9 @@ def _from_row(row: dict) -> dict:
         "transcript": row.get("transcript"),
         "review": row.get("review_results"),
         "framework": row.get("framework"),
+        "error_message": row.get("error_message"),
+        "storage_path": row.get("storage_path"),
+        "celery_task_id": row.get("celery_task_id"),
     }
 
 
@@ -72,6 +79,49 @@ def delete_review(review_id: str) -> None:
     if not existing.data:
         raise FileNotFoundError(f"Review '{review_id}' not found.")
     get_client().table("reviews").delete().eq("id", review_id).execute()
+
+
+def update_review_status(
+    review_id: str,
+    status: str,
+    *,
+    error_message: str | None = None,
+    celery_task_id: str | None = None,
+) -> None:
+    """Partial update of a review's status and optional fields."""
+    patch: dict = {"status": status}
+    if error_message is not None:
+        patch["error_message"] = error_message
+    if celery_task_id is not None:
+        patch["celery_task_id"] = celery_task_id
+    get_client().table("reviews").update(patch).eq("id", review_id).execute()
+
+
+def upload_recording_to_storage(review_id: str, file_bytes: bytes, filename: str) -> str:
+    """Upload a recording to Supabase Storage. Returns the storage path."""
+    safe_name = Path(filename).name
+    path = f"{review_id}/{safe_name}"
+    get_client().storage.from_(STORAGE_BUCKET).upload(path=path, file=file_bytes)
+    return path
+
+
+def get_recording_signed_url(storage_path: str) -> str:
+    """Return a signed URL for the recording, valid for 1 hour."""
+    result = get_client().storage.from_(STORAGE_BUCKET).create_signed_url(
+        path=storage_path,
+        expires_in=3600,
+    )
+    if isinstance(result, dict):
+        return result.get("signedURL") or result.get("signedUrl", "")
+    return str(getattr(result, "signed_url", "") or getattr(result, "signedURL", ""))
+
+
+def delete_recording_from_storage(storage_path: str) -> None:
+    """Delete a recording from Supabase Storage. Silent if not found."""
+    try:
+        get_client().storage.from_(STORAGE_BUCKET).remove([storage_path])
+    except Exception:
+        pass
 
 
 def save_recording(review_id: str, file_bytes: bytes, filename: str) -> Path:

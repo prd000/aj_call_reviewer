@@ -1,13 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import ReviewList from '../components/ReviewList'
 import { deleteReview, listReviews } from '../services/api'
 import './HistoryPage.css'
+
+const IN_PROGRESS_STATUSES = ['pending', 'transcribing', 'reviewing']
 
 export default function HistoryPage() {
   const [reviews, setReviews] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   const [filterRep, setFilterRep] = useState('')
+  const pollingRef = useRef(null)
   const [filterFirm, setFilterFirm] = useState('')
   const [filterAdvisor, setFilterAdvisor] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
@@ -35,13 +38,33 @@ export default function HistoryPage() {
   useEffect(() => {
     let isMounted = true
 
+    function startPolling() {
+      if (pollingRef.current) return
+      pollingRef.current = setInterval(async () => {
+        if (!isMounted) return
+        try {
+          const data = await listReviews()
+          if (!isMounted) return
+          setReviews(data)
+          if (!data.some((r) => IN_PROGRESS_STATUSES.includes(r.status))) {
+            clearInterval(pollingRef.current)
+            pollingRef.current = null
+          }
+        } catch {
+          // silent — retries on next tick
+        }
+      }, 5000)
+    }
+
     async function fetchReviews() {
       setIsLoading(true)
       setError(null)
       try {
         const data = await listReviews()
-        if (isMounted) {
-          setReviews(data)
+        if (!isMounted) return
+        setReviews(data)
+        if (data.some((r) => IN_PROGRESS_STATUSES.includes(r.status))) {
+          startPolling()
         }
       } catch (err) {
         if (isMounted) {
@@ -58,6 +81,10 @@ export default function HistoryPage() {
 
     return () => {
       isMounted = false
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+        pollingRef.current = null
+      }
     }
   }, [])
 
