@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -10,6 +11,9 @@ from routers import upload, reviews, templates
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
+_extra_origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()]
+ALLOWED_ORIGINS = ["http://localhost:5173"] + _extra_origins
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -21,7 +25,7 @@ app = FastAPI(title="Call Reviewer API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

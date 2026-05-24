@@ -160,3 +160,7 @@ cython_debug/
 # Cursor
 .cursorignore
 .cursorindexingignore
+
+# Node
+node_modules/
+frontend/dist/
