@@ -23,11 +23,17 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session: s } }) => {
-      setSession(s)
-      await loadProfile(s)
-      setLoading(false)
-    })
+    supabase.auth.getSession()
+      .then(async ({ data: { session: s } }) => {
+        setSession(s)
+        await loadProfile(s)
+      })
+      .catch((err) => {
+        console.error('Auth session check failed:', err)
+      })
+      .finally(() => {
+        setLoading(false)
+      })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, s) => {

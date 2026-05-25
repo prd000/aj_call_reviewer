@@ -12,7 +12,7 @@ export default function LoginPage() {
   const { login, forgotPassword, user, loading } = useAuth()
   const navigate = useNavigate()
 
-  if (loading) return null
+  if (loading) return <div className="auth-loading"><span className="auth-loading__spinner" /></div>
   if (user) return <Navigate to="/" replace />
 
   async function handleSubmit(e) {

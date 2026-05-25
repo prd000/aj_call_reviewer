@@ -2,9 +2,17 @@ import { supabase } from '../lib/supabase'
 
 const BASE_URL = `${import.meta.env.VITE_API_URL ?? ''}/api`
 
+const REQUEST_TIMEOUT_MS = 15_000
+const UPLOAD_TIMEOUT_MS = 60_000
+
 async function authHeaders() {
   const { data: { session } } = await supabase.auth.getSession()
   return session ? { Authorization: `Bearer ${session.access_token}` } : {}
+}
+
+// Wraps fetch with an AbortSignal timeout so hanging requests don't freeze UI state.
+function apiFetch(url, options = {}, timeoutMs = REQUEST_TIMEOUT_MS) {
+  return fetch(url, { ...options, signal: AbortSignal.timeout(timeoutMs) })
 }
 
 async function handleResponse(response) {
@@ -31,29 +39,29 @@ async function handleResponse(response) {
 
 export async function uploadCall(formData) {
   const headers = await authHeaders()
-  const response = await fetch(`${BASE_URL}/upload`, {
+  const response = await apiFetch(`${BASE_URL}/upload`, {
     method: 'POST',
     headers,
     body: formData,
-  })
+  }, UPLOAD_TIMEOUT_MS)
   return handleResponse(response)
 }
 
 export async function getReview(id) {
   const headers = await authHeaders()
-  const response = await fetch(`${BASE_URL}/reviews/${id}`, { headers })
+  const response = await apiFetch(`${BASE_URL}/reviews/${id}`, { headers })
   return handleResponse(response)
 }
 
 export async function listReviews() {
   const headers = await authHeaders()
-  const response = await fetch(`${BASE_URL}/reviews`, { headers })
+  const response = await apiFetch(`${BASE_URL}/reviews`, { headers })
   return handleResponse(response)
 }
 
 export async function deleteReview(id) {
   const headers = await authHeaders()
-  const response = await fetch(`${BASE_URL}/reviews/${id}`, {
+  const response = await apiFetch(`${BASE_URL}/reviews/${id}`, {
     method: 'DELETE',
     headers,
   })
@@ -64,19 +72,19 @@ export async function deleteReview(id) {
 
 export async function listTemplates() {
   const headers = await authHeaders()
-  const response = await fetch(`${BASE_URL}/templates`, { headers })
+  const response = await apiFetch(`${BASE_URL}/templates`, { headers })
   return handleResponse(response)
 }
 
 export async function getTemplate(id) {
   const headers = await authHeaders()
-  const response = await fetch(`${BASE_URL}/templates/${id}`, { headers })
+  const response = await apiFetch(`${BASE_URL}/templates/${id}`, { headers })
   return handleResponse(response)
 }
 
 export async function createTemplate(body) {
   const headers = { ...(await authHeaders()), 'Content-Type': 'application/json' }
-  const response = await fetch(`${BASE_URL}/templates`, {
+  const response = await apiFetch(`${BASE_URL}/templates`, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
@@ -86,7 +94,7 @@ export async function createTemplate(body) {
 
 export async function updateTemplate(id, body) {
   const headers = { ...(await authHeaders()), 'Content-Type': 'application/json' }
-  const response = await fetch(`${BASE_URL}/templates/${id}`, {
+  const response = await apiFetch(`${BASE_URL}/templates/${id}`, {
     method: 'PUT',
     headers,
     body: JSON.stringify(body),
@@ -96,7 +104,7 @@ export async function updateTemplate(id, body) {
 
 export async function deleteTemplate(id) {
   const headers = await authHeaders()
-  const response = await fetch(`${BASE_URL}/templates/${id}`, {
+  const response = await apiFetch(`${BASE_URL}/templates/${id}`, {
     method: 'DELETE',
     headers,
   })
@@ -107,7 +115,7 @@ export async function deleteTemplate(id) {
 
 export async function getCurrentUserProfile() {
   const headers = await authHeaders()
-  const response = await fetch(`${BASE_URL}/users/me`, { headers })
+  const response = await apiFetch(`${BASE_URL}/users/me`, { headers })
   return handleResponse(response)
 }
 
@@ -115,13 +123,13 @@ export async function getCurrentUserProfile() {
 
 export async function listFirms() {
   const headers = await authHeaders()
-  const response = await fetch(`${BASE_URL}/firms`, { headers })
+  const response = await apiFetch(`${BASE_URL}/firms`, { headers })
   return handleResponse(response)
 }
 
 export async function createFirm(data) {
   const headers = { ...(await authHeaders()), 'Content-Type': 'application/json' }
-  const response = await fetch(`${BASE_URL}/firms`, {
+  const response = await apiFetch(`${BASE_URL}/firms`, {
     method: 'POST',
     headers,
     body: JSON.stringify(data),
@@ -131,13 +139,13 @@ export async function createFirm(data) {
 
 export async function getFirmDetail(id) {
   const headers = await authHeaders()
-  const response = await fetch(`${BASE_URL}/firms/${id}`, { headers })
+  const response = await apiFetch(`${BASE_URL}/firms/${id}`, { headers })
   return handleResponse(response)
 }
 
 export async function updateFirm(id, data) {
   const headers = { ...(await authHeaders()), 'Content-Type': 'application/json' }
-  const response = await fetch(`${BASE_URL}/firms/${id}`, {
+  const response = await apiFetch(`${BASE_URL}/firms/${id}`, {
     method: 'PUT',
     headers,
     body: JSON.stringify(data),
@@ -147,7 +155,7 @@ export async function updateFirm(id, data) {
 
 export async function deleteFirm(id) {
   const headers = await authHeaders()
-  const response = await fetch(`${BASE_URL}/firms/${id}`, {
+  const response = await apiFetch(`${BASE_URL}/firms/${id}`, {
     method: 'DELETE',
     headers,
   })
@@ -163,13 +171,13 @@ export async function getFirmAdvisors(firmId) {
 
 export async function listBdsReps() {
   const headers = await authHeaders()
-  const response = await fetch(`${BASE_URL}/users/bds-reps`, { headers })
+  const response = await apiFetch(`${BASE_URL}/users/bds-reps`, { headers })
   return handleResponse(response)
 }
 
 export async function createUser(data) {
   const headers = { ...(await authHeaders()), 'Content-Type': 'application/json' }
-  const response = await fetch(`${BASE_URL}/users`, {
+  const response = await apiFetch(`${BASE_URL}/users`, {
     method: 'POST',
     headers,
     body: JSON.stringify(data),
@@ -179,7 +187,7 @@ export async function createUser(data) {
 
 export async function updateUser(id, data) {
   const headers = { ...(await authHeaders()), 'Content-Type': 'application/json' }
-  const response = await fetch(`${BASE_URL}/users/${id}`, {
+  const response = await apiFetch(`${BASE_URL}/users/${id}`, {
     method: 'PUT',
     headers,
     body: JSON.stringify(data),
@@ -189,7 +197,7 @@ export async function updateUser(id, data) {
 
 export async function setUserActive(id, active) {
   const headers = { ...(await authHeaders()), 'Content-Type': 'application/json' }
-  const response = await fetch(`${BASE_URL}/users/${id}/active`, {
+  const response = await apiFetch(`${BASE_URL}/users/${id}/active`, {
     method: 'PATCH',
     headers,
     body: JSON.stringify({ active }),
@@ -199,7 +207,7 @@ export async function setUserActive(id, active) {
 
 export async function deleteUser(id) {
   const headers = await authHeaders()
-  const response = await fetch(`${BASE_URL}/users/${id}`, {
+  const response = await apiFetch(`${BASE_URL}/users/${id}`, {
     method: 'DELETE',
     headers,
   })
