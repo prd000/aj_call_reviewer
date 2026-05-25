@@ -10,6 +10,7 @@ import {
   setUserActive,
   updateFirm,
 } from '../services/api'
+import { useLoadingWatchdog } from '../hooks/useLoadingWatchdog'
 import './FirmDetailPage.css'
 
 function UserRow({ user, onToggleActive, onDelete }) {
@@ -81,6 +82,7 @@ export default function FirmDetailPage() {
   const [bdsReps, setBdsReps] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
+  useLoadingWatchdog(isLoading, setIsLoading, { label: 'firm-detail' })
 
   const [editName, setEditName] = useState('')
   const [editTemplateId, setEditTemplateId] = useState('')

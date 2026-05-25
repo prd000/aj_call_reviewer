@@ -37,20 +37,20 @@ def _fa_can_access(review: dict, user: dict) -> bool:
 
 
 @router.get("/reviews")
-def get_reviews(user: dict = Depends(get_current_user)):
+async def get_reviews(user: dict = Depends(get_current_user)):
     if user["role"] == "financial_advisor":
-        all_reviews = list_reviews(
+        all_reviews = await list_reviews(
             firm_id=user["firm_id"],
             uploader_role="financial_advisor",
         )
     else:
-        all_reviews = list_reviews()
+        all_reviews = await list_reviews()
     return [_review_summary(r) for r in all_reviews]
 
 
 @router.get("/reviews/{review_id}")
-def get_review_by_id(review_id: str, user: dict = Depends(get_current_user)):
-    review = get_review(review_id)
+async def get_review_by_id(review_id: str, user: dict = Depends(get_current_user)):
+    review = await get_review(review_id)
     if review is None:
         raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
     if user["role"] == "financial_advisor" and not _fa_can_access(review, user):
@@ -59,13 +59,13 @@ def get_review_by_id(review_id: str, user: dict = Depends(get_current_user)):
 
 
 @router.delete("/reviews/{review_id}", status_code=204)
-def delete_review_by_id(review_id: str, user: dict = Depends(get_current_user)):
-    review = get_review(review_id)
+async def delete_review_by_id(review_id: str, user: dict = Depends(get_current_user)):
+    review = await get_review(review_id)
     if review is None:
         raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
     if user["role"] == "financial_advisor" and not _fa_can_access(review, user):
         raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
-    delete_review(review_id)
+    await delete_review(review_id)
     if review.get("storage_path"):
-        delete_recording_from_storage(review["storage_path"])
+        await delete_recording_from_storage(review["storage_path"])
     return Response(status_code=204)

@@ -43,7 +43,7 @@ async def upload_call(
             raise HTTPException(
                 status_code=400, detail="Your account is not associated with a firm."
             )
-        firm = get_firm(fa_firm_id)
+        firm = await get_firm(fa_firm_id)
         if firm is None:
             raise HTTPException(status_code=400, detail="Firm not found.")
         effective_template_id = firm.get("template_id")
@@ -64,10 +64,10 @@ async def upload_call(
         if not template_id:
             raise HTTPException(status_code=400, detail="template_id is required.")
 
-        firm = get_firm(firm_id)
+        firm = await get_firm(firm_id)
         if firm is None:
             raise HTTPException(status_code=400, detail="Firm not found.")
-        advisor = get_profile(advisor_user_id)
+        advisor = await get_profile(advisor_user_id)
         if advisor is None:
             raise HTTPException(status_code=400, detail="Advisor not found.")
 
@@ -90,7 +90,7 @@ async def upload_call(
     file_bytes = await file.read()
 
     try:
-        storage_path = upload_recording_to_storage(
+        storage_path = await upload_recording_to_storage(
             record["id"], file_bytes, file.filename or "recording"
         )
     except Exception as exc:
@@ -102,18 +102,18 @@ async def upload_call(
     record["storage_path"] = storage_path
 
     try:
-        save_review(record)
+        await save_review(record)
     except Exception as exc:
         logger.error("Failed to save review record %s: %s", record["id"], exc)
-        delete_recording_from_storage(storage_path)
+        await delete_recording_from_storage(storage_path)
         raise HTTPException(status_code=500, detail="Failed to save review record.")
 
     try:
         task = process_review_task.delay(record["id"], effective_template_id)
-        update_review_status(record["id"], "pending", celery_task_id=task.id)
+        await update_review_status(record["id"], "pending", celery_task_id=task.id)
     except Exception as exc:
         logger.error("Failed to enqueue task for review %s: %s", record["id"], exc)
-        update_review_status(
+        await update_review_status(
             record["id"],
             "failed",
             error_message="Failed to queue processing task — Redis may be unavailable.",

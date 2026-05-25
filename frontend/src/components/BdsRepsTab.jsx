@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createUser, deleteUser, listBdsReps, setUserActive } from '../services/api'
+import { useLoadingWatchdog } from '../hooks/useLoadingWatchdog'
 import './BdsRepsTab.css'
 
 function BdsRepRow({ rep, onToggleActive, onDelete }) {
@@ -65,6 +66,7 @@ export default function BdsRepsTab() {
   const [reps, setReps] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [showAddForm, setShowAddForm] = useState(false)
+  useLoadingWatchdog(isLoading, setIsLoading, { label: 'bds-reps' })
   const [newName, setNewName] = useState('')
   const [newEmail, setNewEmail] = useState('')
   const [addError, setAddError] = useState(null)

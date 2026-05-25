@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase'
+import { getSession, signOut } from '../lib/supabaseAuth'
 
 const BASE_URL = `${import.meta.env.VITE_API_URL ?? ''}/api`
 
@@ -6,7 +6,7 @@ const REQUEST_TIMEOUT_MS = 15_000
 const UPLOAD_TIMEOUT_MS = 60_000
 
 async function authHeaders() {
-  const { data: { session } } = await supabase.auth.getSession()
+  const { data: { session } } = await getSession()
   return session ? { Authorization: `Bearer ${session.access_token}` } : {}
 }
 
@@ -18,7 +18,7 @@ function apiFetch(url, options = {}, timeoutMs = REQUEST_TIMEOUT_MS) {
 async function handleResponse(response) {
   if (response.status === 204) return undefined
   if (response.status === 401) {
-    await supabase.auth.signOut()
+    signOut()
     window.location.href = '/login'
     throw new Error('Session expired. Please log in again.')
   }

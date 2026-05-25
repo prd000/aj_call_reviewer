@@ -6,6 +6,7 @@ import {
   updateTemplate,
   deleteTemplate,
 } from '../services/api'
+import { useLoadingWatchdog } from '../hooks/useLoadingWatchdog'
 import CriteriaCard from './CriteriaCard'
 import './TemplateManager.css'
 
@@ -21,6 +22,7 @@ export default function TemplateManager({ onCriteriaChange }) {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
+  useLoadingWatchdog(isLoading, setIsLoading, { label: 'template-manager' })
 
   useEffect(() => {
     initTemplates()

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { createFirm, listFirms, listTemplates } from '../services/api'
+import { useLoadingWatchdog } from '../hooks/useLoadingWatchdog'
 import './FirmsTab.css'
 
 export default function FirmsTab() {
@@ -8,6 +9,7 @@ export default function FirmsTab() {
   const [templates, setTemplates] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [showAddForm, setShowAddForm] = useState(false)
+  useLoadingWatchdog(isLoading, setIsLoading, { label: 'firms' })
   const [newName, setNewName] = useState('')
   const [newTemplateId, setNewTemplateId] = useState('')
   const [addError, setAddError] = useState(null)

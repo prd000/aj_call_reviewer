@@ -45,37 +45,37 @@ class ActiveBody(BaseModel):
 
 
 @router.get("/firms")
-def get_firms(user: dict = Depends(require_bds_rep)):
-    return list_firms()
+async def get_firms(user: dict = Depends(require_bds_rep)):
+    return await list_firms()
 
 
 @router.post("/firms")
-def create_firm(body: FirmBody, user: dict = Depends(require_bds_rep)):
-    return save_firm(body.model_dump())
+async def create_firm(body: FirmBody, user: dict = Depends(require_bds_rep)):
+    return await save_firm(body.model_dump())
 
 
 @router.get("/firms/{firm_id}")
-def get_firm_detail(firm_id: str, user: dict = Depends(require_bds_rep)):
-    firm = get_firm(firm_id)
+async def get_firm_detail(firm_id: str, user: dict = Depends(require_bds_rep)):
+    firm = await get_firm(firm_id)
     if firm is None:
         raise HTTPException(status_code=404, detail="Firm not found")
-    return {"firm": firm, "users": get_firm_users(firm_id)}
+    return {"firm": firm, "users": await get_firm_users(firm_id)}
 
 
 @router.put("/firms/{firm_id}")
-def update_firm(firm_id: str, body: FirmBody, user: dict = Depends(require_bds_rep)):
-    existing = get_firm(firm_id)
+async def update_firm(firm_id: str, body: FirmBody, user: dict = Depends(require_bds_rep)):
+    existing = await get_firm(firm_id)
     if existing is None:
         raise HTTPException(status_code=404, detail="Firm not found")
     data = {**existing, **body.model_dump(exclude_unset=True), "id": firm_id}
-    return save_firm(data)
+    return await save_firm(data)
 
 
 @router.delete("/firms/{firm_id}", status_code=204)
-def remove_firm(firm_id: str, user: dict = Depends(require_bds_rep)):
-    if get_firm(firm_id) is None:
+async def remove_firm(firm_id: str, user: dict = Depends(require_bds_rep)):
+    if await get_firm(firm_id) is None:
         raise HTTPException(status_code=404, detail="Firm not found")
-    delete_firm(firm_id)
+    await delete_firm(firm_id)
     return Response(status_code=204)
 
 
@@ -83,13 +83,13 @@ def remove_firm(firm_id: str, user: dict = Depends(require_bds_rep)):
 
 
 @router.get("/users/me")
-def get_me(user: dict = Depends(get_current_user)):
-    profile = get_profile(user["user_id"])
+async def get_me(user: dict = Depends(get_current_user)):
+    profile = await get_profile(user["user_id"])
     if profile is None:
         raise HTTPException(status_code=404, detail="Profile not found")
     # Include firm name so the frontend doesn't need a separate firm fetch
     if profile.get("firm_id"):
-        firm = get_firm(profile["firm_id"])
+        firm = await get_firm(profile["firm_id"])
         profile["firm_name"] = firm["name"] if firm else None
     else:
         profile["firm_name"] = None
@@ -97,14 +97,14 @@ def get_me(user: dict = Depends(get_current_user)):
 
 
 @router.get("/users/bds-reps")
-def get_bds_reps(user: dict = Depends(require_bds_rep)):
-    return list_bds_reps()
+async def get_bds_reps(user: dict = Depends(require_bds_rep)):
+    return await list_bds_reps()
 
 
 @router.post("/users")
-def create_new_user(body: UserBody, user: dict = Depends(require_bds_rep)):
+async def create_new_user(body: UserBody, user: dict = Depends(require_bds_rep)):
     try:
-        return create_user(
+        return await create_user(
             email=body.email,
             name=body.name,
             role=body.role,
@@ -116,21 +116,21 @@ def create_new_user(body: UserBody, user: dict = Depends(require_bds_rep)):
 
 
 @router.put("/users/{user_id}")
-def update_user(
+async def update_user(
     user_id: str, body: UpdateUserBody, user: dict = Depends(require_bds_rep)
 ):
-    profile = update_profile(user_id, body.model_dump(exclude_unset=True))
+    profile = await update_profile(user_id, body.model_dump(exclude_unset=True))
     if profile is None:
         raise HTTPException(status_code=404, detail="User not found")
     return profile
 
 
 @router.patch("/users/{user_id}/active")
-def toggle_user_active(
+async def toggle_user_active(
     user_id: str, body: ActiveBody, user: dict = Depends(require_bds_rep)
 ):
     try:
-        set_active(user_id, body.active)
+        await set_active(user_id, body.active)
         return {"user_id": user_id, "active": body.active}
     except Exception as exc:
         logger.error("Failed to set active=%s for user %s: %s", body.active, user_id, exc)
@@ -138,9 +138,9 @@ def toggle_user_active(
 
 
 @router.delete("/users/{user_id}", status_code=204)
-def remove_user(user_id: str, user: dict = Depends(require_bds_rep)):
+async def remove_user(user_id: str, user: dict = Depends(require_bds_rep)):
     try:
-        delete_user(user_id)
+        await delete_user(user_id)
     except Exception as exc:
         logger.error("Failed to delete user %s: %s", user_id, exc)
         raise HTTPException(status_code=400, detail=str(exc))

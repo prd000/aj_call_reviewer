@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ReviewList from '../components/ReviewList'
 import { useAuth } from '../context/AuthContext'
+import { useLoadingWatchdog } from '../hooks/useLoadingWatchdog'
 import { deleteReview, listFirms, listReviews } from '../services/api'
 import './HistoryPage.css'
 
@@ -14,6 +15,7 @@ export default function HistoryPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   const [filterFirm, setFilterFirm] = useState('')
+  useLoadingWatchdog(isLoading, setIsLoading, { label: 'history' })
   const [filterAdvisor, setFilterAdvisor] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [firms, setFirms] = useState([])

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import ReviewResults from '../components/ReviewResults'
+import { useLoadingWatchdog } from '../hooks/useLoadingWatchdog'
 import { getReview } from '../services/api'
 import './ResultsPage.css'
 
@@ -9,6 +10,7 @@ export default function ResultsPage() {
   const [review, setReview] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
+  useLoadingWatchdog(isLoading, setIsLoading, { label: 'results' })
 
   useEffect(() => {
     let isMounted = true

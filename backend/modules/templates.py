@@ -78,40 +78,45 @@ DEFAULT_CRITERIA = [
 ]
 
 
-def list_templates() -> list[dict]:
-    result = get_client().table("templates").select("*").order("created_at", desc=True).execute()
+async def list_templates() -> list[dict]:
+    client = await get_client()
+    result = await client.table("templates").select("*").order("created_at", desc=True).execute()
     return result.data
 
 
-def get_template(template_id: str) -> dict | None:
-    result = get_client().table("templates").select("*").eq("id", template_id).execute()
+async def get_template(template_id: str) -> dict | None:
+    client = await get_client()
+    result = await client.table("templates").select("*").eq("id", template_id).execute()
     if not result.data:
         return None
     return result.data[0]
 
 
-def save_template(template: dict) -> dict:
+async def save_template(template: dict) -> dict:
+    client = await get_client()
     now = datetime.now(timezone.utc).isoformat()
     if "id" not in template:
         template["id"] = str(uuid.uuid4())
     if "created_at" not in template:
         template["created_at"] = now
     template["updated_at"] = now
-    get_client().table("templates").upsert(template).execute()
+    await client.table("templates").upsert(template).execute()
     return template
 
 
-def delete_template(template_id: str) -> bool:
-    existing = get_client().table("templates").select("id").eq("id", template_id).execute()
+async def delete_template(template_id: str) -> bool:
+    client = await get_client()
+    existing = await client.table("templates").select("id").eq("id", template_id).execute()
     if not existing.data:
         return False
-    get_client().table("templates").delete().eq("id", template_id).execute()
+    await client.table("templates").delete().eq("id", template_id).execute()
     return True
 
 
-def migrate_default_template() -> None:
+async def migrate_default_template() -> None:
     """One-time startup migration: import disk templates into Supabase, then seed Rudimentary if absent."""
-    existing = get_client().table("templates").select("id").execute()
+    client = await get_client()
+    existing = await client.table("templates").select("id").execute()
     if existing.data:
         return
 
@@ -127,7 +132,7 @@ def migrate_default_template() -> None:
         for path in templates_dir.glob("*.json"):
             try:
                 data = json.loads(path.read_text(encoding="utf-8"))
-                get_client().table("templates").upsert(data).execute()
+                await client.table("templates").upsert(data).execute()
                 migrated += 1
             except Exception as exc:
                 logger.warning("Failed to migrate template %s: %s", path, exc)
@@ -136,7 +141,7 @@ def migrate_default_template() -> None:
         logger.info("Migrated %d template(s) from disk to Supabase.", migrated)
 
     # Seed Rudimentary if still absent after migration
-    after = get_client().table("templates").select("name").execute()
+    after = await client.table("templates").select("name").execute()
     if any(t.get("name") == "Rudimentary" for t in after.data):
         return
 
@@ -144,5 +149,5 @@ def migrate_default_template() -> None:
         "name": "Rudimentary",
         "criteria": [{"id": str(uuid.uuid4()), **c} for c in DEFAULT_CRITERIA],
     }
-    save_template(template)
+    await save_template(template)
     logger.info("Created default 'Rudimentary' template.")

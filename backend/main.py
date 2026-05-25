@@ -17,7 +17,7 @@ ALLOWED_ORIGINS = ["http://localhost:5173"] + _extra_origins
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    migrate_default_template()
+    await migrate_default_template()
     yield
 
 

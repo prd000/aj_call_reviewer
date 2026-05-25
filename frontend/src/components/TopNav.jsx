@@ -6,8 +6,8 @@ export default function TopNav() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
 
-  async function handleLogout() {
-    await logout()
+  function handleLogout() {
+    logout()
     navigate('/login')
   }
 

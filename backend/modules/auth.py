@@ -2,12 +2,13 @@ from fastapi import Depends, HTTPException, Header
 from modules.supabase_client import get_client
 
 
-def get_current_user(authorization: str = Header(...)):
+async def get_current_user(authorization: str = Header(...)):
     if not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Invalid authorization header")
     token = authorization.removeprefix("Bearer ")
     try:
-        resp = get_client().auth.get_user(token)
+        client = await get_client()
+        resp = await client.auth.get_user(token)
         auth_user = resp.user
         if auth_user is None:
             raise HTTPException(status_code=401, detail="Invalid token")
@@ -16,8 +17,9 @@ def get_current_user(authorization: str = Header(...)):
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    profile_resp = (
-        get_client().table("profiles").select("*").eq("id", str(auth_user.id)).execute()
+    client = await get_client()
+    profile_resp = await (
+        client.table("profiles").select("*").eq("id", str(auth_user.id)).execute()
     )
     if not profile_resp.data:
         raise HTTPException(status_code=401, detail="No profile found")
