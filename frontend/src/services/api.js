@@ -5,9 +5,17 @@ const BASE_URL = `${import.meta.env.VITE_API_URL ?? ''}/api`
 const REQUEST_TIMEOUT_MS = 15_000
 const UPLOAD_TIMEOUT_MS = 60_000
 
+export class NoSessionError extends Error {
+  constructor() {
+    super('No active session')
+    this.name = 'NoSessionError'
+  }
+}
+
 async function authHeaders() {
   const { data: { session } } = await getSession()
-  return session ? { Authorization: `Bearer ${session.access_token}` } : {}
+  if (!session) throw new NoSessionError()
+  return { Authorization: `Bearer ${session.access_token}` }
 }
 
 // Wraps fetch with an AbortSignal timeout so hanging requests don't freeze UI state.

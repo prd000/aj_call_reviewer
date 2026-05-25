@@ -6,14 +6,27 @@ import './BdsRepsTab.css'
 function BdsRepRow({ rep, onToggleActive, onDelete }) {
   const [showConfirm, setShowConfirm] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [rowError, setRowError] = useState(null)
 
   async function handleDelete() {
     setIsDeleting(true)
+    setRowError(null)
     try {
       await onDelete()
+      setShowConfirm(false)
+    } catch (err) {
+      setRowError(err?.message || 'Failed to delete BDS rep.')
     } finally {
       setIsDeleting(false)
-      setShowConfirm(false)
+    }
+  }
+
+  async function handleToggle() {
+    setRowError(null)
+    try {
+      await onToggleActive()
+    } catch (err) {
+      setRowError(err?.message || 'Failed to update BDS rep.')
     }
   }
 
@@ -27,9 +40,10 @@ function BdsRepRow({ rep, onToggleActive, onDelete }) {
         >
           {rep.is_active ? 'Active' : 'Inactive'}
         </span>
+        {rowError && <span className="upload-form__error">{rowError}</span>}
       </div>
       <div className="bds-reps-tab__actions">
-        <button className="mgmt-btn mgmt-btn--ghost" onClick={onToggleActive}>
+        <button className="mgmt-btn mgmt-btn--ghost" onClick={handleToggle}>
           {rep.is_active ? 'Deactivate' : 'Reactivate'}
         </button>
         {showConfirm ? (
@@ -43,7 +57,7 @@ function BdsRepRow({ rep, onToggleActive, onDelete }) {
             </button>
             <button
               className="mgmt-btn mgmt-btn--ghost"
-              onClick={() => setShowConfirm(false)}
+              onClick={() => { setShowConfirm(false); setRowError(null) }}
               disabled={isDeleting}
             >
               Cancel
@@ -52,7 +66,7 @@ function BdsRepRow({ rep, onToggleActive, onDelete }) {
         ) : (
           <button
             className="mgmt-btn mgmt-btn--danger-outline"
-            onClick={() => setShowConfirm(true)}
+            onClick={() => { setShowConfirm(true); setRowError(null) }}
           >
             Delete
           </button>
@@ -104,19 +118,16 @@ export default function BdsRepsTab() {
   }
 
   async function handleToggleActive(userId, currentlyActive) {
-    try {
-      await setUserActive(userId, !currentlyActive)
-      setReps((prev) =>
-        prev.map((r) => (r.id === userId ? { ...r, is_active: !currentlyActive } : r))
-      )
-    } catch {}
+    // Errors propagate to BdsRepRow for inline display.
+    await setUserActive(userId, !currentlyActive)
+    setReps((prev) =>
+      prev.map((r) => (r.id === userId ? { ...r, is_active: !currentlyActive } : r))
+    )
   }
 
   async function handleDelete(userId) {
-    try {
-      await deleteUser(userId)
-      setReps((prev) => prev.filter((r) => r.id !== userId))
-    } catch {}
+    await deleteUser(userId)
+    setReps((prev) => prev.filter((r) => r.id !== userId))
   }
 
   if (isLoading) return <div className="bds-reps-tab__loading">Loading BDS reps…</div>

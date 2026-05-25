@@ -7,7 +7,7 @@ import {
   onAuthStateChange,
 } from '../lib/supabaseAuth'
 import { useLoadingWatchdog } from '../hooks/useLoadingWatchdog'
-import { getCurrentUserProfile } from '../services/api'
+import { getCurrentUserProfile, NoSessionError } from '../services/api'
 
 const AuthContext = createContext(null)
 
@@ -26,8 +26,21 @@ export function AuthProvider({ children }) {
     try {
       const profile = await getCurrentUserProfile()
       setUser({ id: activeSession.user.id, ...profile })
-    } catch {
-      setUser(null)
+    } catch (err) {
+      // Only clear the user when we know the session is gone.
+      // NoSessionError = no Supabase session at call time (handled by setting user=null).
+      // 401 = apiFetch already triggered signOut() + redirect; setting null mirrors that.
+      // Anything else (network blip, 5xx) leaves the existing user state untouched
+      // so a transient error doesn't masquerade as auth loss.
+      if (err instanceof NoSessionError) {
+        setUser(null)
+        return
+      }
+      if (err?.message === 'Session expired. Please log in again.') {
+        setUser(null)
+        return
+      }
+      console.error('loadProfile failed (transient):', err)
     }
   }
 

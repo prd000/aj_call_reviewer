@@ -73,6 +73,16 @@ async def set_active(user_id: str, active: bool) -> None:
 
 
 async def delete_user(user_id: str) -> None:
+    # Idempotent: a missing auth user or missing profile is a success state
+    # (post-condition: user does not exist). Delete auth first since it's the
+    # source of truth — if it succeeds but the profile delete fails, the next
+    # retry still converges.
     client = await get_client()
+    try:
+        await client.auth.admin.delete_user(user_id)
+    except Exception as exc:
+        msg = str(exc).lower()
+        if "not found" not in msg and "user_not_found" not in msg:
+            raise
+        logger.info("Auth user %s already absent; continuing with profile delete", user_id)
     await client.table("profiles").delete().eq("id", user_id).execute()
-    await client.auth.admin.delete_user(user_id)

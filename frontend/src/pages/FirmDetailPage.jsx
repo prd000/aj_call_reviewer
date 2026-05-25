@@ -16,14 +16,27 @@ import './FirmDetailPage.css'
 function UserRow({ user, onToggleActive, onDelete }) {
   const [showConfirm, setShowConfirm] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [rowError, setRowError] = useState(null)
 
   async function handleDelete() {
     setIsDeleting(true)
+    setRowError(null)
     try {
       await onDelete()
+      setShowConfirm(false)
+    } catch (err) {
+      setRowError(err?.message || 'Failed to delete user.')
     } finally {
       setIsDeleting(false)
-      setShowConfirm(false)
+    }
+  }
+
+  async function handleToggle() {
+    setRowError(null)
+    try {
+      await onToggleActive()
+    } catch (err) {
+      setRowError(err?.message || 'Failed to update user.')
     }
   }
 
@@ -37,9 +50,10 @@ function UserRow({ user, onToggleActive, onDelete }) {
         >
           {user.is_active ? 'Active' : 'Inactive'}
         </span>
+        {rowError && <span className="upload-form__error">{rowError}</span>}
       </div>
       <div className="user-row__actions">
-        <button className="mgmt-btn mgmt-btn--ghost" onClick={onToggleActive}>
+        <button className="mgmt-btn mgmt-btn--ghost" onClick={handleToggle}>
           {user.is_active ? 'Deactivate' : 'Reactivate'}
         </button>
         {showConfirm ? (
@@ -53,7 +67,7 @@ function UserRow({ user, onToggleActive, onDelete }) {
             </button>
             <button
               className="mgmt-btn mgmt-btn--ghost"
-              onClick={() => setShowConfirm(false)}
+              onClick={() => { setShowConfirm(false); setRowError(null) }}
               disabled={isDeleting}
             >
               Cancel
@@ -62,7 +76,7 @@ function UserRow({ user, onToggleActive, onDelete }) {
         ) : (
           <button
             className="mgmt-btn mgmt-btn--danger-outline"
-            onClick={() => setShowConfirm(true)}
+            onClick={() => { setShowConfirm(true); setRowError(null) }}
           >
             Delete
           </button>
@@ -157,19 +171,16 @@ export default function FirmDetailPage() {
   }
 
   async function handleToggleActive(userId, currentlyActive) {
-    try {
-      await setUserActive(userId, !currentlyActive)
-      setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, is_active: !currentlyActive } : u))
-      )
-    } catch {}
+    // Errors propagate to UserRow so the row can display them.
+    await setUserActive(userId, !currentlyActive)
+    setUsers((prev) =>
+      prev.map((u) => (u.id === userId ? { ...u, is_active: !currentlyActive } : u))
+    )
   }
 
   async function handleDeleteUser(userId) {
-    try {
-      await deleteUser(userId)
-      setUsers((prev) => prev.filter((u) => u.id !== userId))
-    } catch {}
+    await deleteUser(userId)
+    setUsers((prev) => prev.filter((u) => u.id !== userId))
   }
 
   async function handleDeleteFirm() {
