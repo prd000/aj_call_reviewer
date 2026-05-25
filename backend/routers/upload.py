@@ -2,7 +2,7 @@ import logging
 from fastapi import APIRouter, Form, HTTPException, UploadFile
 
 from modules.ingestion import create_record, validate_file
-from modules.storage import delete_recording_from_storage, save_review, upload_recording_to_storage
+from modules.storage import delete_recording_from_storage, save_review, update_review_status, upload_recording_to_storage
 from tasks import process_review_task
 
 logger = logging.getLogger(__name__)
@@ -57,10 +57,10 @@ async def upload_call(
 
     try:
         task = process_review_task.delay(record["id"], template_id)
-        storage.update_review_status(record["id"], "pending", celery_task_id=task.id)
+        update_review_status(record["id"], "pending", celery_task_id=task.id)
     except Exception as exc:
         logger.error("Failed to enqueue task for review %s: %s", record["id"], exc)
-        storage.update_review_status(
+        update_review_status(
             record["id"],
             "failed",
             error_message="Failed to queue processing task — Redis may be unavailable.",
