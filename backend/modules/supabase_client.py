@@ -1,5 +1,7 @@
 import os
-from supabase import create_client, Client
+
+import httpx
+from supabase import Client, ClientOptions, create_client
 
 _client: Client | None = None
 
@@ -10,5 +12,6 @@ def get_client() -> Client:
         _client = create_client(
             os.environ["SUPABASE_URL"],
             os.environ["SUPABASE_KEY"],
+            options=ClientOptions(http_client=httpx.Client(timeout=10.0)),
         )
     return _client

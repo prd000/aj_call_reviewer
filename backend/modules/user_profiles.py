@@ -21,10 +21,15 @@ def get_profile(user_id: str) -> dict | None:
 
 
 def create_user(email: str, name: str, role: str, firm_id: str | None = None) -> dict:
+    existing = get_client().table("profiles").select("id").eq("email", email).execute()
+    if existing.data:
+        raise ValueError(f"A user with email {email} is already registered.")
+
     now = datetime.now(timezone.utc).isoformat()
-    # invite_user_by_email creates the auth user AND sends an invite email with a password-set link
     user_resp = get_client().auth.admin.invite_user_by_email(email)
     auth_user = user_resp.user
+    if auth_user is None:
+        raise ValueError("Failed to invite user — the email may already be in use.")
     user_id = str(auth_user.id)
 
     profile = {
