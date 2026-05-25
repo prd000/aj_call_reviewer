@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import datetime, timezone
 
 from modules.supabase_client import get_client
@@ -29,7 +30,9 @@ async def create_user(email: str, name: str, role: str, firm_id: str | None = No
         raise ValueError(f"A user with email {email} is already registered.")
 
     now = datetime.now(timezone.utc).isoformat()
-    user_resp = await client.auth.admin.invite_user_by_email(email)
+    app_url = os.environ.get("VITE_APP_URL", "").rstrip("/")
+    invite_options = {"redirect_to": f"{app_url}/set-password"} if app_url else {}
+    user_resp = await client.auth.admin.invite_user_by_email(email, invite_options)
     auth_user = user_resp.user
     if auth_user is None:
         raise ValueError("Failed to invite user — the email may already be in use.")

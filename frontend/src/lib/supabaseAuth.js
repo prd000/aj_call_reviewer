@@ -45,6 +45,14 @@ export async function resetPasswordForEmail(email) {
   )
 }
 
+export async function updateUser(attributes) {
+  return withTimeout(
+    supabase.auth.updateUser(attributes),
+    AUTH_TIMEOUT_MS,
+    'updateUser'
+  )
+}
+
 // Pass-through; subscription model can't be wrapped meaningfully.
 export function onAuthStateChange(callback) {
   return supabase.auth.onAuthStateChange(callback)

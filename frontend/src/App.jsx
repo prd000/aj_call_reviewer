@@ -8,6 +8,7 @@ import HistoryPage from './pages/HistoryPage'
 import LoginPage from './pages/LoginPage'
 import ManagementPage from './pages/ManagementPage'
 import ResultsPage from './pages/ResultsPage'
+import SetPasswordPage from './pages/SetPasswordPage'
 import UploadPage from './pages/UploadPage'
 
 function Layout() {
@@ -24,6 +25,7 @@ export default function App() {
     <AuthProvider>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/set-password" element={<SetPasswordPage />} />
         <Route element={<ProtectedRoute />}>
           <Route element={<Layout />}>
             <Route path="/" element={<UploadPage />} />
