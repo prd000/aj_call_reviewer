@@ -12,8 +12,6 @@ logger = logging.getLogger(__name__)
 @app.task(bind=True, max_retries=2, default_retry_delay=10)
 def process_review_task(self, review_id: str, template_id: str):
     try:
-        storage.update_review_status(review_id, "pending", celery_task_id=self.request.id)
-
         template = get_template(template_id)
         criteria = template["criteria"]
 
