@@ -191,3 +191,13 @@
   color: var(--color-muted);
   cursor: not-allowed;
 }
+
+.upload-form__select {
+  cursor: pointer;
+}
+
+.upload-form__input--readonly {
+  opacity: 0.65;
+  cursor: default;
+  user-select: none;
+}

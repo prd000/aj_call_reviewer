@@ -17,6 +17,14 @@ def process_review_task(self, review_id: str, template_id: str):
 
         storage.update_review_status(review_id, "transcribing")
         review = storage.get_review(review_id)
+        if not review:
+            logger.error("Review %s not found in database — marking failed, no retry", review_id)
+            storage.update_review_status(review_id, "failed", error_message="Review record not found in database")
+            return
+        if not review.get("storage_path"):
+            logger.error("Review %s has no storage_path — marking failed, no retry", review_id)
+            storage.update_review_status(review_id, "failed", error_message="No storage path for recording")
+            return
         signed_url = storage.get_recording_signed_url(review["storage_path"])
 
         logger.info("Starting transcription for review %s", review_id)

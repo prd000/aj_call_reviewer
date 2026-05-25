@@ -97,3 +97,71 @@ img {
   padding: 0 var(--space-lg);
   width: 100%;
 }
+
+/* Shared management button classes used across management components */
+.mgmt-btn {
+  height: 36px;
+  padding: 0 var(--space-md);
+  border-radius: var(--rounded-md);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background-color var(--transition-fast), color var(--transition-fast),
+    border-color var(--transition-fast), opacity var(--transition-fast);
+}
+
+.mgmt-btn--primary {
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.mgmt-btn--primary:hover:not(:disabled) {
+  background-color: var(--color-primary-active);
+}
+
+.mgmt-btn--primary:disabled {
+  background-color: var(--color-primary-disabled);
+  color: var(--color-muted);
+  cursor: not-allowed;
+}
+
+.mgmt-btn--ghost {
+  background: none;
+  border-color: var(--color-hairline);
+  color: var(--color-body);
+}
+
+.mgmt-btn--ghost:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.mgmt-btn--danger {
+  background-color: var(--color-danger);
+  color: #fff;
+}
+
+.mgmt-btn--danger:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.mgmt-btn--danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mgmt-btn--danger-outline {
+  background: none;
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+.mgmt-btn--danger-outline:hover {
+  background-color: rgba(246, 70, 93, 0.08);
+}
+
+.auth-loading {
+  min-height: 100vh;
+  background-color: var(--color-canvas);
+}

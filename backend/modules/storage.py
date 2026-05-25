@@ -19,7 +19,6 @@ def _to_row(review: dict) -> dict:
         "advisor_name": metadata.get("advisor_name"),
         "firm": metadata.get("firm"),
         "prospect_name": metadata.get("prospect_name"),
-        "bds_rep": metadata.get("bds_rep"),
         "original_filename": metadata.get("original_filename"),
         "speaker_map": review.get("speaker_map"),
         "transcript": review.get("transcript"),
@@ -28,6 +27,9 @@ def _to_row(review: dict) -> dict:
         "error_message": review.get("error_message"),
         "storage_path": review.get("storage_path"),
         "celery_task_id": review.get("celery_task_id"),
+        "firm_id": review.get("firm_id"),
+        "uploaded_by": review.get("uploaded_by"),
+        "uploader_role": review.get("uploader_role"),
     }
 
 
@@ -40,7 +42,7 @@ def _from_row(row: dict) -> dict:
             "advisor_name": row.get("advisor_name"),
             "firm": row.get("firm"),
             "prospect_name": row.get("prospect_name"),
-            "bds_rep": row.get("bds_rep"),
+            "bds_rep": row.get("bds_rep"),  # retained for pre-auth legacy records
             "original_filename": row.get("original_filename"),
         },
         "speaker_map": row.get("speaker_map"),
@@ -50,6 +52,9 @@ def _from_row(row: dict) -> dict:
         "error_message": row.get("error_message"),
         "storage_path": row.get("storage_path"),
         "celery_task_id": row.get("celery_task_id"),
+        "firm_id": row.get("firm_id"),
+        "uploaded_by": row.get("uploaded_by"),
+        "uploader_role": row.get("uploader_role"),
     }
 
 
@@ -67,9 +72,20 @@ def get_review(review_id: str) -> dict | None:
     return _from_row(result.data[0])
 
 
-def list_reviews() -> list[dict]:
-    """Fetch all review records from Supabase, sorted by created_at descending."""
-    result = get_client().table("reviews").select("*").order("created_at", desc=True).execute()
+def list_reviews(
+    firm_id: str | None = None,
+    uploader_role: str | None = None,
+) -> list[dict]:
+    """Fetch review records from Supabase, sorted by created_at descending.
+
+    Pass firm_id and/or uploader_role to filter to a specific audience (FA visibility rule).
+    """
+    query = get_client().table("reviews").select("*").order("created_at", desc=True)
+    if firm_id is not None:
+        query = query.eq("firm_id", firm_id)
+    if uploader_role is not None:
+        query = query.eq("uploader_role", uploader_role)
+    result = query.execute()
     return [_from_row(row) for row in result.data]
 
 

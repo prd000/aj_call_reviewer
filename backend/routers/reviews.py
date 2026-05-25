@@ -1,8 +1,9 @@
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 
+from modules.auth import get_current_user
 from modules.storage import delete_recording_from_storage, delete_review, get_review, list_reviews
 
 logger = logging.getLogger(__name__)
@@ -27,24 +28,42 @@ def _review_summary(review: dict) -> dict:
     }
 
 
+def _fa_can_access(review: dict, user: dict) -> bool:
+    """Return True if an FA user is permitted to see this review."""
+    return (
+        review.get("firm_id") == user["firm_id"]
+        and review.get("uploader_role") == "financial_advisor"
+    )
+
+
 @router.get("/reviews")
-def get_reviews():
-    all_reviews = list_reviews()
+def get_reviews(user: dict = Depends(get_current_user)):
+    if user["role"] == "financial_advisor":
+        all_reviews = list_reviews(
+            firm_id=user["firm_id"],
+            uploader_role="financial_advisor",
+        )
+    else:
+        all_reviews = list_reviews()
     return [_review_summary(r) for r in all_reviews]
 
 
 @router.get("/reviews/{review_id}")
-def get_review_by_id(review_id: str):
+def get_review_by_id(review_id: str, user: dict = Depends(get_current_user)):
     review = get_review(review_id)
     if review is None:
+        raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
+    if user["role"] == "financial_advisor" and not _fa_can_access(review, user):
         raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
     return review
 
 
 @router.delete("/reviews/{review_id}", status_code=204)
-def delete_review_by_id(review_id: str):
+def delete_review_by_id(review_id: str, user: dict = Depends(get_current_user)):
     review = get_review(review_id)
     if review is None:
+        raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
+    if user["role"] == "financial_advisor" and not _fa_can_access(review, user):
         raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
     delete_review(review_id)
     if review.get("storage_path"):

@@ -99,9 +99,6 @@ function ReviewListItem({ review, onClick, onDelete }) {
         </div>
         <div className="review-list-item__secondary">
           <span className="review-list-item__prospect">Prospect: {metadata?.prospect_name || '—'}</span>
-          {metadata?.bds_rep && (
-            <span className="review-list-item__bds-rep">BDS: {metadata.bds_rep}</span>
-          )}
           <span className="review-list-item__date">{formatDate(created_at)}</span>
         </div>
       </div>
@@ -157,11 +154,10 @@ function ReviewListItem({ review, onClick, onDelete }) {
   )
 }
 
-export default function ReviewList({ reviews, filterRep, filterFirm, filterAdvisor, searchQuery, onDelete }) {
+export default function ReviewList({ reviews, filterFirm, filterAdvisor, searchQuery, onDelete }) {
   const navigate = useNavigate()
 
   const filtered = reviews.filter((r) => {
-    if (filterRep && r.metadata?.bds_rep !== filterRep) return false
     if (filterFirm && r.metadata?.firm !== filterFirm) return false
     if (filterAdvisor && r.metadata?.advisor_name !== filterAdvisor) return false
     if (searchQuery) {
@@ -170,7 +166,6 @@ export default function ReviewList({ reviews, filterRep, filterFirm, filterAdvis
         r.metadata?.advisor_name,
         r.metadata?.firm,
         r.metadata?.prospect_name,
-        r.metadata?.bds_rep,
       ].filter(Boolean).join(' ').toLowerCase()
       if (!searchable.includes(q)) return false
     }
