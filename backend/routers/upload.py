@@ -55,7 +55,8 @@ async def upload_call(
         delete_recording_from_storage(storage_path)
         raise HTTPException(status_code=500, detail="Failed to save review record.")
 
-    process_review_task.delay(record["id"], template_id)
+    task = process_review_task.delay(record["id"], template_id)
+    storage.update_review_status(record["id"], "pending", celery_task_id=task.id)
 
     logger.info(
         "Enqueued review %s (advisor: %s, firm: %s, prospect: %s, bds_rep: %s, template_id: %s)",
