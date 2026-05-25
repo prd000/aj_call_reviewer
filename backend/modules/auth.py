@@ -2,7 +2,7 @@ from fastapi import Depends, HTTPException, Header
 from modules.supabase_client import get_client
 
 
-async def get_current_user(authorization: str = Header(...)):
+def get_current_user(authorization: str = Header(...)):
     if not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Invalid authorization header")
     token = authorization.removeprefix("Bearer ")
