@@ -26,6 +26,7 @@ function apiFetch(url, options = {}, timeoutMs = REQUEST_TIMEOUT_MS) {
 async function handleResponse(response) {
   if (response.status === 204) return undefined
   if (response.status === 401) {
+    console.warn('[api] 401 from backend — signing out and redirecting to /login')
     signOut()
     window.location.href = '/login'
     throw new Error('Session expired. Please log in again.')
@@ -37,6 +38,11 @@ async function handleResponse(response) {
       errorMessage = errorData.detail || errorData.message || errorMessage
     } catch {
       // Response body is not JSON — use the default message
+    }
+    // 5xx is a server-side transient failure — log but do NOT touch auth state.
+    // Caller decides how to surface it (retry silently, show banner, etc.).
+    if (response.status >= 500) {
+      console.warn(`[api] ${response.status} from backend (transient):`, errorMessage)
     }
     throw new Error(errorMessage)
   }

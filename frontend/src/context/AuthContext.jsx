@@ -62,7 +62,14 @@ export function AuthProvider({ children }) {
         setSession(s)
         if (event === 'SIGNED_OUT') {
           setUser(null)
-        } else if (s) {
+          return
+        }
+        // Only fetch the profile when the identity actually changes. TOKEN_REFRESHED
+        // and USER_UPDATED fire on a cadence (every ~hour for token refresh, plus
+        // tab-visibility events) and the profile hasn't changed — re-fetching on
+        // every event multiplies background `/me` traffic and means any transient
+        // backend hiccup during idle has many chances to force a logout.
+        if (s && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
           await loadProfile(s)
         }
       }
