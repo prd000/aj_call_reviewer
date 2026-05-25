@@ -11,3 +11,10 @@ app = Celery(
     backend=None,
     include=["tasks"],
 )
+
+app.conf.update(
+    broker_transport_options={
+        "socket_timeout": 5,
+        "socket_connect_timeout": 5,
+    },
+)

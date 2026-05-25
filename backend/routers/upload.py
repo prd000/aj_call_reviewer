@@ -55,8 +55,16 @@ async def upload_call(
         delete_recording_from_storage(storage_path)
         raise HTTPException(status_code=500, detail="Failed to save review record.")
 
-    task = process_review_task.delay(record["id"], template_id)
-    storage.update_review_status(record["id"], "pending", celery_task_id=task.id)
+    try:
+        task = process_review_task.delay(record["id"], template_id)
+        storage.update_review_status(record["id"], "pending", celery_task_id=task.id)
+    except Exception as exc:
+        logger.error("Failed to enqueue task for review %s: %s", record["id"], exc)
+        storage.update_review_status(
+            record["id"],
+            "failed",
+            error_message="Failed to queue processing task — Redis may be unavailable.",
+        )
 
     logger.info(
         "Enqueued review %s (advisor: %s, firm: %s, prospect: %s, bds_rep: %s, template_id: %s)",
