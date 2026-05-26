@@ -23,6 +23,20 @@ _TRANSIENT_EXCEPTIONS = (
 def _validate_token(token: str) -> str:
     """Verify JWT locally. Returns user_id from `sub` claim. Raises 401 on failure."""
     try:
+        # Diagnostic: decode without verification to log actual claims
+        unverified = jwt.decode(token, options={"verify_signature": False})
+        logger.warning(
+            "JWT claims (unverified) — iss=%r aud=%r sub=%r | expected iss=%r aud=%r",
+            unverified.get("iss"),
+            unverified.get("aud"),
+            unverified.get("sub"),
+            SUPABASE_ISSUER,
+            "authenticated",
+        )
+    except Exception as diag_err:
+        logger.warning("JWT diagnostic decode failed: %r", diag_err)
+
+    try:
         payload = jwt.decode(
             token,
             SUPABASE_JWT_SECRET,
@@ -35,7 +49,7 @@ def _validate_token(token: str) -> str:
     except ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
     except InvalidTokenError as e:
-        logger.info("JWT rejected: %s", e)
+        logger.warning("JWT rejected: %s", e)
         raise HTTPException(status_code=401, detail="Invalid token")
     sub = payload.get("sub")
     if not sub:
