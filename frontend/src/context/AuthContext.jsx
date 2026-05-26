@@ -7,7 +7,7 @@ import {
   onAuthStateChange,
 } from '../lib/supabaseAuth'
 import { useLoadingWatchdog } from '../hooks/useLoadingWatchdog'
-import { getCurrentUserProfile, NoSessionError } from '../services/api'
+import { getCurrentUserProfile, NoSessionError, SessionUnavailableError } from '../services/api'
 
 const AuthContext = createContext(null)
 
@@ -16,7 +16,7 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  useLoadingWatchdog(loading, setLoading, { timeoutMs: 10_000, label: 'auth-init' })
+  useLoadingWatchdog(loading, setLoading, { timeoutMs: 20_000, label: 'auth-init' })
 
   async function loadProfile(activeSession) {
     if (!activeSession) {
@@ -24,22 +24,17 @@ export function AuthProvider({ children }) {
       return
     }
     try {
-      const profile = await getCurrentUserProfile()
+      const profile = await getCurrentUserProfile(activeSession.access_token)
       setUser({ id: activeSession.user.id, ...profile })
     } catch (err) {
-      // Only clear the user when we know the session is gone.
-      // NoSessionError = no Supabase session at call time (handled by setting user=null).
-      // 401 = apiFetch already triggered signOut() + redirect; setting null mirrors that.
-      // Anything else (network blip, 5xx) leaves the existing user state untouched
-      // so a transient error doesn't masquerade as auth loss.
-      if (err instanceof NoSessionError) {
-        setUser(null)
+      // SessionUnavailableError = transient Supabase failure — preserve existing user state.
+      if (err instanceof SessionUnavailableError) {
+        console.warn('loadProfile: transient session-check failure — preserving user state')
         return
       }
-      if (err?.message === 'Session expired. Please log in again.') {
-        setUser(null)
-        return
-      }
+      // NoSessionError = Supabase confirmed no session; 401 = backend confirmed token invalid.
+      if (err instanceof NoSessionError) { setUser(null); return }
+      if (err?.message === 'Session expired. Please log in again.') { setUser(null); return }
       console.error('loadProfile failed (transient):', err)
     }
   }
@@ -51,7 +46,11 @@ export function AuthProvider({ children }) {
         await loadProfile(s)
       })
       .catch((err) => {
-        console.error('Auth session check failed:', err)
+        if (err instanceof SessionUnavailableError) {
+          console.warn('Initial getSession transient failure — user can retry')
+        } else {
+          console.error('Auth session check failed:', err)
+        }
       })
       .finally(() => {
         setLoading(false)
@@ -61,7 +60,16 @@ export function AuthProvider({ children }) {
       async (event, s) => {
         setSession(s)
         if (event === 'SIGNED_OUT') {
-          setUser(null)
+          try {
+            const { data: { session: recheck } } = await getSession()
+            if (!recheck) setUser(null)
+          } catch (err) {
+            if (err instanceof SessionUnavailableError) {
+              console.warn('SIGNED_OUT received but session re-check failed transiently; preserving user')
+            } else {
+              setUser(null)
+            }
+          }
           return
         }
         // Only fetch the profile when the identity actually changes. TOKEN_REFRESHED
@@ -82,7 +90,7 @@ export function AuthProvider({ children }) {
   async function login(email, password) {
     const { data, error } = await signInWithPassword({ email, password })
     if (error) throw error
-    const profile = await getCurrentUserProfile()
+    const profile = await getCurrentUserProfile(data.session.access_token)
     setUser({ id: data.user.id, ...profile })
     setSession(data.session)
   }

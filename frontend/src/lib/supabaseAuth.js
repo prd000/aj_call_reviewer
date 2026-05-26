@@ -11,12 +11,20 @@ function withTimeout(promise, ms, label) {
   ])
 }
 
+export class SessionUnavailableError extends Error {
+  constructor(cause) {
+    super('Supabase session check failed')
+    this.name = 'SessionUnavailableError'
+    this.cause = cause
+  }
+}
+
 export async function getSession() {
   try {
     return await withTimeout(supabase.auth.getSession(), AUTH_TIMEOUT_MS, 'getSession')
   } catch (e) {
-    console.error('[supabaseAuth] getSession failed:', e)
-    return { data: { session: null } }
+    console.warn('[supabaseAuth] getSession transient failure:', e)
+    throw new SessionUnavailableError(e)
   }
 }
 

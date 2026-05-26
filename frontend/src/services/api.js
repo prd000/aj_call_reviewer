@@ -1,4 +1,6 @@
-import { getSession, signOut } from '../lib/supabaseAuth'
+import { getSession, signOut, SessionUnavailableError } from '../lib/supabaseAuth'
+
+export { SessionUnavailableError }
 
 const BASE_URL = `${import.meta.env.VITE_API_URL ?? ''}/api`
 
@@ -12,7 +14,8 @@ export class NoSessionError extends Error {
   }
 }
 
-async function authHeaders() {
+async function authHeaders(accessToken) {
+  if (accessToken) return { Authorization: `Bearer ${accessToken}` }
   const { data: { session } } = await getSession()
   if (!session) throw new NoSessionError()
   return { Authorization: `Bearer ${session.access_token}` }
@@ -127,8 +130,8 @@ export async function deleteTemplate(id) {
 
 // ── User / Auth ───────────────────────────────────────────────────────────────
 
-export async function getCurrentUserProfile() {
-  const headers = await authHeaders()
+export async function getCurrentUserProfile(accessToken) {
+  const headers = await authHeaders(accessToken)
   const response = await apiFetch(`${BASE_URL}/users/me`, { headers })
   return handleResponse(response)
 }
