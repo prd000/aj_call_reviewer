@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import {
   getSession,
+  refreshSession,
   signInWithPassword,
   signOut,
   resetPasswordForEmail,
@@ -40,32 +41,75 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
-    getSession()
-      .then(async ({ data: { session: s } }) => {
+    let cancelled = false
+
+    async function bootstrap() {
+      async function attempt() {
+        const { data: { session: s } } = await getSession()
+        if (cancelled) return
         setSession(s)
         await loadProfile(s)
-      })
-      .catch((err) => {
-        if (err instanceof SessionUnavailableError) {
-          console.warn('Initial getSession transient failure — user can retry')
-        } else {
-          console.error('Auth session check failed:', err)
+      }
+
+      try {
+        await attempt()
+      } catch (err) {
+        if (err instanceof SessionUnavailableError && !cancelled) {
+          // One retry after a short delay for transient supabase-js unavailability
+          // (e.g., in-flight token refresh holding the lock on cold start).
+          console.warn('[auth] bootstrap getSession transient failure — retrying in 2s')
+          await new Promise(r => setTimeout(r, 2000))
+          if (!cancelled) {
+            try {
+              await attempt()
+            } catch (retryErr) {
+              if (!cancelled) {
+                if (retryErr instanceof SessionUnavailableError) {
+                  console.warn('[auth] bootstrap getSession persistently unavailable after retry')
+                } else {
+                  console.error('[auth] Auth session check failed on retry:', retryErr)
+                }
+              }
+            }
+          }
+        } else if (!cancelled) {
+          console.error('[auth] Auth session check failed:', err)
         }
-      })
-      .finally(() => {
-        setLoading(false)
-      })
+      }
+
+      if (!cancelled) setLoading(false)
+    }
+
+    bootstrap()
 
     const { data: { subscription } } = onAuthStateChange(
       async (event, s) => {
         setSession(s)
         if (event === 'SIGNED_OUT') {
+          // supabase-js fires SIGNED_OUT when a background token refresh fails.
+          // Attempt one explicit re-refresh before giving up — recovers from
+          // transient network errors that caused the initial refresh to fail.
+          console.warn('[auth] SIGNED_OUT event received — attempting session recovery')
+          try {
+            const { data } = await refreshSession()
+            if (data?.session) {
+              console.warn('[auth] SIGNED_OUT: session recovered via re-refresh — keeping user logged in')
+              setSession(data.session)
+              return
+            }
+          } catch {
+            // SessionUnavailableError or no refresh token — recovery failed
+          }
+          // Recovery failed: verify the session is truly gone before clearing user.
           try {
             const { data: { session: recheck } } = await getSession()
-            if (!recheck) setUser(null)
+            if (!recheck) {
+              console.warn('[auth] SIGNED_OUT confirmed — clearing user state')
+              setUser(null)
+            }
           } catch (err) {
             if (err instanceof SessionUnavailableError) {
-              console.warn('SIGNED_OUT received but session re-check failed transiently; preserving user')
+              console.warn('[auth] SIGNED_OUT re-check failed transiently; preserving user')
             } else {
               setUser(null)
             }
@@ -83,7 +127,10 @@ export function AuthProvider({ children }) {
       }
     )
 
-    return () => subscription.unsubscribe()
+    return () => {
+      cancelled = true
+      subscription.unsubscribe()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

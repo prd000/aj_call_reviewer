@@ -1,4 +1,4 @@
-import { getSession, signOut, SessionUnavailableError } from '../lib/supabaseAuth'
+import { getSession, signOut, refreshSession, SessionUnavailableError } from '../lib/supabaseAuth'
 
 export { SessionUnavailableError }
 
@@ -29,6 +29,24 @@ function apiFetch(url, options = {}, timeoutMs = REQUEST_TIMEOUT_MS) {
 async function handleResponse(response) {
   if (response.status === 204) return undefined
   if (response.status === 401) {
+    // Before forcing a logout, attempt one token refresh. This handles the race
+    // condition where the JWT expired right as this request was in-flight and
+    // supabase-js hadn't rotated it yet.
+    let refreshed = false
+    try {
+      const { data } = await refreshSession()
+      if (data?.session) {
+        console.warn('[api] 401 — session refreshed; the failed operation may be retried')
+        refreshed = true
+      }
+    } catch {
+      // SessionUnavailableError or no refresh token — refresh failed, log out below
+    }
+    if (refreshed) {
+      // The user is still authenticated. Surface a retryable error to the caller
+      // instead of wiping the session.
+      throw new Error('Request failed. Please try again.')
+    }
     console.warn('[api] 401 from backend — signing out and redirecting to /login')
     signOut()
     window.location.href = '/login'

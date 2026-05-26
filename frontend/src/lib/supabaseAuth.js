@@ -61,6 +61,15 @@ export async function updateUser(attributes) {
   )
 }
 
+export async function refreshSession() {
+  try {
+    return await withTimeout(supabase.auth.refreshSession(), AUTH_TIMEOUT_MS, 'refreshSession')
+  } catch (e) {
+    console.warn('[supabaseAuth] refreshSession transient failure:', e)
+    throw new SessionUnavailableError(e)
+  }
+}
+
 // Pass-through; subscription model can't be wrapped meaningfully.
 export function onAuthStateChange(callback) {
   return supabase.auth.onAuthStateChange(callback)
