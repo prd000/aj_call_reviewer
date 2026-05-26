@@ -1,6 +1,8 @@
 import logging
 import os
+import secrets
 from datetime import datetime, timezone
+from uuid import uuid4
 
 from modules.supabase_client import get_client
 
@@ -45,6 +47,33 @@ async def create_user(email: str, name: str, role: str, firm_id: str | None = No
         "role": role,
         "firm_id": firm_id,
         "is_active": True,
+        "created_at": now,
+        "updated_at": now,
+    }
+    await client.table("profiles").insert(profile).execute()
+    return profile
+
+
+async def create_advisor_only(name: str, firm_id: str) -> dict:
+    client = await get_client()
+    placeholder_email = f"advisor-{uuid4()}@noreply.internal"
+    now = datetime.now(timezone.utc).isoformat()
+
+    user_resp = await client.auth.admin.create_user({
+        "email": placeholder_email,
+        "password": secrets.token_urlsafe(32),
+        "email_confirm": True,
+    })
+    user_id = str(user_resp.user.id)
+
+    profile = {
+        "id": user_id,
+        "email": placeholder_email,
+        "name": name,
+        "role": "financial_advisor",
+        "firm_id": firm_id,
+        "is_active": True,
+        "is_platform_user": False,
         "created_at": now,
         "updated_at": now,
     }

@@ -40,22 +40,30 @@ function UserRow({ user, onToggleActive, onDelete }) {
     }
   }
 
+  const isAdvisorOnly = user.is_platform_user === false
+
   return (
     <div className="user-row">
       <div className="user-row__info">
         <span className="user-row__name">{user.name}</span>
-        <span className="user-row__email">{user.email}</span>
-        <span
-          className={`user-row__status${user.is_active ? ' user-row__status--active' : ' user-row__status--inactive'}`}
-        >
-          {user.is_active ? 'Active' : 'Inactive'}
-        </span>
+        {!isAdvisorOnly && <span className="user-row__email">{user.email}</span>}
+        {isAdvisorOnly ? (
+          <span className="user-row__status user-row__status--advisor-only">Advisor</span>
+        ) : (
+          <span
+            className={`user-row__status${user.is_active ? ' user-row__status--active' : ' user-row__status--inactive'}`}
+          >
+            {user.is_active ? 'Active' : 'Inactive'}
+          </span>
+        )}
         {rowError && <span className="upload-form__error">{rowError}</span>}
       </div>
       <div className="user-row__actions">
-        <button className="mgmt-btn mgmt-btn--ghost" onClick={handleToggle}>
-          {user.is_active ? 'Deactivate' : 'Reactivate'}
-        </button>
+        {!isAdvisorOnly && (
+          <button className="mgmt-btn mgmt-btn--ghost" onClick={handleToggle}>
+            {user.is_active ? 'Deactivate' : 'Reactivate'}
+          </button>
+        )}
         {showConfirm ? (
           <>
             <button
@@ -107,6 +115,7 @@ export default function FirmDetailPage() {
   const [showAddFa, setShowAddFa] = useState(false)
   const [faName, setFaName] = useState('')
   const [faEmail, setFaEmail] = useState('')
+  const [sendInvite, setSendInvite] = useState(true)
   const [isAddingFa, setIsAddingFa] = useState(false)
   const [faError, setFaError] = useState(null)
 
@@ -146,22 +155,29 @@ export default function FirmDetailPage() {
   }
 
   async function handleAddFa() {
-    if (!faName.trim() || !faEmail.trim()) {
-      setFaError('Name and email are required.')
+    if (!faName.trim()) {
+      setFaError('Name is required.')
+      return
+    }
+    if (sendInvite && !faEmail.trim()) {
+      setFaError('Email is required when sending a platform invitation.')
       return
     }
     setIsAddingFa(true)
     setFaError(null)
     try {
-      const profile = await createUser({
-        email: faEmail.trim(),
+      const payload = {
         name: faName.trim(),
         role: 'financial_advisor',
         firm_id: id,
-      })
+        send_invite: sendInvite,
+        ...(sendInvite ? { email: faEmail.trim() } : {}),
+      }
+      const profile = await createUser(payload)
       setUsers((prev) => [...prev, profile])
       setFaName('')
       setFaEmail('')
+      setSendInvite(true)
       setShowAddFa(false)
     } catch (err) {
       setFaError(err.message || 'Failed to create advisor.')
@@ -276,7 +292,11 @@ export default function FirmDetailPage() {
             <h2 className="firm-detail-page__section-title">Financial Advisors</h2>
             <button
               className="mgmt-btn mgmt-btn--primary"
-              onClick={() => { setShowAddFa((v) => !v); setFaError(null) }}
+              onClick={() => {
+                setShowAddFa((v) => !v)
+                setFaError(null)
+                setSendInvite(true)
+              }}
             >
               {showAddFa ? 'Cancel' : '+ Add Advisor'}
             </button>
@@ -291,13 +311,15 @@ export default function FirmDetailPage() {
                   value={faName}
                   onChange={(e) => { setFaName(e.target.value); setFaError(null) }}
                 />
-                <input
-                  className="upload-form__input"
-                  placeholder="Email address"
-                  type="email"
-                  value={faEmail}
-                  onChange={(e) => { setFaEmail(e.target.value); setFaError(null) }}
-                />
+                {sendInvite && (
+                  <input
+                    className="upload-form__input"
+                    placeholder="Email address"
+                    type="email"
+                    value={faEmail}
+                    onChange={(e) => { setFaEmail(e.target.value); setFaError(null) }}
+                  />
+                )}
                 <button
                   className="mgmt-btn mgmt-btn--primary"
                   onClick={handleAddFa}
@@ -306,6 +328,14 @@ export default function FirmDetailPage() {
                   {isAddingFa ? 'Adding…' : 'Add'}
                 </button>
               </div>
+              <label className="firm-detail-page__invite-toggle">
+                <input
+                  type="checkbox"
+                  checked={sendInvite}
+                  onChange={(e) => { setSendInvite(e.target.checked); setFaError(null) }}
+                />
+                Send platform invitation
+              </label>
               {faError && <span className="upload-form__error">{faError}</span>}
             </div>
           )}

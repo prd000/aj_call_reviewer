@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from modules.auth import get_current_user, require_bds_rep
 from modules.firms import delete_firm, get_firm, get_firm_users, list_firms, save_firm
 from modules.user_profiles import (
+    create_advisor_only,
     create_user,
     delete_user,
     get_profile,
@@ -26,10 +27,11 @@ class FirmBody(BaseModel):
 
 
 class UserBody(BaseModel):
-    email: str
+    email: str | None = None
     name: str
     role: str
     firm_id: str | None = None
+    send_invite: bool = True
 
 
 class UpdateUserBody(BaseModel):
@@ -104,6 +106,14 @@ async def get_bds_reps(user: dict = Depends(require_bds_rep)):
 @router.post("/users")
 async def create_new_user(body: UserBody, user: dict = Depends(require_bds_rep)):
     try:
+        if not body.send_invite:
+            if not body.firm_id:
+                raise ValueError("firm_id is required for advisor-only records.")
+            if body.role != "financial_advisor":
+                raise ValueError("Advisor-only records must have role 'financial_advisor'.")
+            return await create_advisor_only(name=body.name, firm_id=body.firm_id)
+        if not body.email:
+            raise ValueError("email is required when send_invite is true.")
         return await create_user(
             email=body.email,
             name=body.name,
@@ -111,7 +121,7 @@ async def create_new_user(body: UserBody, user: dict = Depends(require_bds_rep))
             firm_id=body.firm_id,
         )
     except Exception as exc:
-        logger.error("Failed to create user %s: %s", body.email, exc)
+        logger.error("Failed to create user: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc))
 
 

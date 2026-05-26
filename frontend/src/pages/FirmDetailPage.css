@@ -156,6 +156,27 @@
   flex-shrink: 0;
 }
 
+.user-row__status--advisor-only {
+  background-color: rgba(252, 213, 53, 0.12);
+  color: var(--color-primary);
+}
+
+.firm-detail-page__invite-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: 13px;
+  color: var(--color-muted);
+  margin-top: var(--space-xs);
+  cursor: pointer;
+  user-select: none;
+}
+
+.firm-detail-page__invite-toggle input[type="checkbox"] {
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
 .firm-detail-page__danger-zone {
   border-color: rgba(246, 70, 93, 0.3);
 }
