@@ -4,13 +4,15 @@ import os
 import httpx
 import jwt
 from fastapi import Depends, HTTPException, Header
-from jwt import ExpiredSignatureError, InvalidTokenError
+from jwt import ExpiredSignatureError, InvalidTokenError, PyJWKClient
 from modules.user_profiles import get_profile
 
 logger = logging.getLogger(__name__)
 
-SUPABASE_JWT_SECRET = os.environ["SUPABASE_JWT_SECRET"]
-SUPABASE_ISSUER = f"{os.environ['SUPABASE_URL'].rstrip('/')}/auth/v1"
+_SUPABASE_URL = os.environ["SUPABASE_URL"].rstrip("/")
+SUPABASE_JWT_SECRET = os.environ.get("SUPABASE_JWT_SECRET", "")
+SUPABASE_ISSUER = f"{_SUPABASE_URL}/auth/v1"
+_JWKS_URL = f"{_SUPABASE_URL}/auth/v1/.well-known/jwks.json"
 
 _TRANSIENT_EXCEPTIONS = (
     httpx.TimeoutException,
@@ -19,38 +21,54 @@ _TRANSIENT_EXCEPTIONS = (
     httpx.NetworkError,
 )
 
+# Lazy singleton — fetches JWKS once, caches by key ID
+_jwks_client: PyJWKClient | None = None
+
+
+def _get_jwks_client() -> PyJWKClient:
+    global _jwks_client
+    if _jwks_client is None:
+        _jwks_client = PyJWKClient(_JWKS_URL, cache_keys=True)
+    return _jwks_client
+
 
 def _validate_token(token: str) -> str:
-    """Verify JWT locally. Returns user_id from `sub` claim. Raises 401 on failure."""
+    """Verify JWT. Supports HS256 (secret) and RS256 (JWKS). Returns sub claim."""
     try:
-        # Diagnostic: decode without verification to log actual claims
-        unverified = jwt.decode(token, options={"verify_signature": False})
-        logger.warning(
-            "JWT claims (unverified) — iss=%r aud=%r sub=%r | expected iss=%r aud=%r",
-            unverified.get("iss"),
-            unverified.get("aud"),
-            unverified.get("sub"),
-            SUPABASE_ISSUER,
-            "authenticated",
-        )
-    except Exception as diag_err:
-        logger.warning("JWT diagnostic decode failed: %r", diag_err)
+        alg = jwt.get_unverified_header(token).get("alg", "HS256")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
     try:
-        payload = jwt.decode(
-            token,
-            SUPABASE_JWT_SECRET,
-            algorithms=["HS256"],
-            audience="authenticated",
-            issuer=SUPABASE_ISSUER,
-            options={"require": ["exp", "sub", "aud", "iss"]},
-            leeway=30,
-        )
+        if alg == "HS256":
+            payload = jwt.decode(
+                token,
+                SUPABASE_JWT_SECRET,
+                algorithms=["HS256"],
+                audience="authenticated",
+                issuer=SUPABASE_ISSUER,
+                options={"require": ["exp", "sub", "aud", "iss"]},
+                leeway=30,
+            )
+        else:
+            signing_key = _get_jwks_client().get_signing_key_from_jwt(token)
+            payload = jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=[alg],
+                audience="authenticated",
+                issuer=SUPABASE_ISSUER,
+                options={"require": ["exp", "sub", "aud", "iss"]},
+                leeway=30,
+            )
     except ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
     except InvalidTokenError as e:
-        logger.warning("JWT rejected: %s", e)
+        logger.info("JWT rejected (alg=%s): %s", alg, e)
         raise HTTPException(status_code=401, detail="Invalid token")
+    except (httpx.TimeoutException, httpx.ConnectError, httpx.RemoteProtocolError, httpx.NetworkError) as e:
+        logger.warning("JWKS fetch failed: %r", e)
+        raise HTTPException(status_code=503, detail="Auth service temporarily unavailable")
     sub = payload.get("sub")
     if not sub:
         raise HTTPException(status_code=401, detail="Invalid token")
