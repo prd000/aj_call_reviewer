@@ -1,29 +1,32 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ReviewList from '../components/ReviewList'
-import { deleteReview, listReviews } from '../services/api'
+import SearchableSelect from '../components/SearchableSelect'
+import { useAuth } from '../context/AuthContext'
+import { useLoadingWatchdog } from '../hooks/useLoadingWatchdog'
+import { deleteReview, listFirms, listReviews } from '../services/api'
 import './HistoryPage.css'
 
 const IN_PROGRESS_STATUSES = ['pending', 'transcribing', 'reviewing']
 
 export default function HistoryPage() {
+  const { user } = useAuth()
+  const isBds = user?.role === 'bds_rep'
+
   const [reviews, setReviews] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [filterRep, setFilterRep] = useState('')
-  const pollingRef = useRef(null)
   const [filterFirm, setFilterFirm] = useState('')
+  useLoadingWatchdog(isLoading, setIsLoading, { label: 'history' })
   const [filterAdvisor, setFilterAdvisor] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
+  const [firms, setFirms] = useState([])
+  const pollingRef = useRef(null)
 
-  const repOptions = useMemo(() => {
-    const reps = reviews.map((r) => r.metadata?.bds_rep).filter(Boolean)
-    return [...new Set(reps)].sort()
-  }, [reviews])
-
+  // For BDS reps: firm options come from the API so all firms appear even with no reviews yet
   const firmOptions = useMemo(() => {
-    const firms = reviews.map((r) => r.metadata?.firm).filter(Boolean)
-    return [...new Set(firms)].sort()
-  }, [reviews])
+    if (isBds) return firms.map((f) => f.name).sort()
+    return []
+  }, [isBds, firms])
 
   const advisorOptions = useMemo(() => {
     const advisors = reviews.map((r) => r.metadata?.advisor_name).filter(Boolean)
@@ -56,28 +59,27 @@ export default function HistoryPage() {
       }, 5000)
     }
 
-    async function fetchReviews() {
+    async function fetchAll() {
       setIsLoading(true)
       setError(null)
       try {
-        const data = await listReviews()
+        const requests = [listReviews()]
+        if (isBds) requests.push(listFirms())
+        const [data, firmData] = await Promise.all(requests)
         if (!isMounted) return
         setReviews(data)
+        if (firmData) setFirms(firmData)
         if (data.some((r) => IN_PROGRESS_STATUSES.includes(r.status))) {
           startPolling()
         }
       } catch (err) {
-        if (isMounted) {
-          setError(err.message || 'Failed to load reviews.')
-        }
+        if (isMounted) setError(err.message || 'Failed to load reviews.')
       } finally {
-        if (isMounted) {
-          setIsLoading(false)
-        }
+        if (isMounted) setIsLoading(false)
       }
     }
 
-    fetchReviews()
+    fetchAll()
 
     return () => {
       isMounted = false
@@ -86,7 +88,7 @@ export default function HistoryPage() {
         pollingRef.current = null
       }
     }
-  }, [])
+  }, [isBds])
 
   return (
     <div className="history-page">
@@ -103,7 +105,7 @@ export default function HistoryPage() {
         {isLoading && (
           <div className="history-page__loading">
             <div className="history-page__spinner" aria-label="Loading reviews" />
-            <p>Loading reviews...</p>
+            <p>Loading reviews…</p>
           </div>
         )}
 
@@ -131,59 +133,40 @@ export default function HistoryPage() {
             </div>
 
             {advisorOptions.length > 0 && (
-              <div className="history-page__filter">
+              <div className="history-page__filter history-page__filter--select">
                 <label htmlFor="advisor-filter" className="history-page__filter-label">
                   Advisor
                 </label>
-                <select
+                <SearchableSelect
                   id="advisor-filter"
-                  className="history-page__filter-select"
+                  size="sm"
+                  options={[
+                    { value: '', label: 'All' },
+                    ...advisorOptions.map((a) => ({ value: a, label: a })),
+                  ]}
                   value={filterAdvisor}
-                  onChange={(e) => setFilterAdvisor(e.target.value)}
-                >
-                  <option value="">All</option>
-                  {advisorOptions.map((a) => (
-                    <option key={a} value={a}>{a}</option>
-                  ))}
-                </select>
+                  onChange={setFilterAdvisor}
+                  placeholder="All"
+                />
               </div>
             )}
 
-            {firmOptions.length > 0 && (
-              <div className="history-page__filter">
+            {isBds && firmOptions.length > 0 && (
+              <div className="history-page__filter history-page__filter--select">
                 <label htmlFor="firm-filter" className="history-page__filter-label">
                   Firm
                 </label>
-                <select
+                <SearchableSelect
                   id="firm-filter"
-                  className="history-page__filter-select"
+                  size="sm"
+                  options={[
+                    { value: '', label: 'All' },
+                    ...firmOptions.map((f) => ({ value: f, label: f })),
+                  ]}
                   value={filterFirm}
-                  onChange={(e) => setFilterFirm(e.target.value)}
-                >
-                  <option value="">All</option>
-                  {firmOptions.map((f) => (
-                    <option key={f} value={f}>{f}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {repOptions.length > 0 && (
-              <div className="history-page__filter">
-                <label htmlFor="rep-filter" className="history-page__filter-label">
-                  BDS Rep
-                </label>
-                <select
-                  id="rep-filter"
-                  className="history-page__filter-select"
-                  value={filterRep}
-                  onChange={(e) => setFilterRep(e.target.value)}
-                >
-                  <option value="">All</option>
-                  {repOptions.map((rep) => (
-                    <option key={rep} value={rep}>{rep}</option>
-                  ))}
-                </select>
+                  onChange={setFilterFirm}
+                  placeholder="All"
+                />
               </div>
             )}
           </div>
@@ -192,7 +175,6 @@ export default function HistoryPage() {
         {!isLoading && !error && (
           <ReviewList
             reviews={reviews}
-            filterRep={filterRep}
             filterFirm={filterFirm}
             filterAdvisor={filterAdvisor}
             searchQuery={searchQuery}

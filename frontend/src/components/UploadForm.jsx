@@ -1,4 +1,5 @@
-import { useState, useRef } from 'react'
+import { useRef, useState } from 'react'
+import SearchableSelect from './SearchableSelect'
 import './UploadForm.css'
 
 const ACCEPTED_EXTENSIONS = ['.mp3', '.mp4', '.m4a', '.wav']
@@ -10,69 +11,122 @@ function validateFileExtension(filename) {
   return ACCEPTED_EXTENSIONS.includes(ext)
 }
 
-export default function UploadForm({ onSubmit, isLoading }) {
-  const [fields, setFields] = useState({
-    advisorName: '',
-    firm: '',
-    prospectName: '',
-    bdsRep: '',
-  })
+export default function UploadForm({
+  onSubmit,
+  isLoading,
+  userRole,
+  userName,
+  userFirmName,
+  firms = [],
+  firmAdvisors = [],
+  onFirmChange,
+  selectedFirmId = '',
+  selectedAdvisorId = '',
+  onSelectFirm,
+  onSelectAdvisor,
+  onCreateFirm,
+  onCreateAdvisor,
+}) {
+  const isBds = userRole === 'bds_rep'
+  const [prospectName, setProspectName] = useState('')
   const [file, setFile] = useState(null)
   const [errors, setErrors] = useState({})
   const [isDragOver, setIsDragOver] = useState(false)
   const fileInputRef = useRef(null)
 
-  function handleFieldChange(e) {
-    const { name, value } = e.target
-    setFields((prev) => ({ ...prev, [name]: value }))
-    if (errors[name]) {
-      setErrors((prev) => ({ ...prev, [name]: '' }))
-    }
-  }
+  const [showAddFirm, setShowAddFirm] = useState(false)
+  const [newFirmName, setNewFirmName] = useState('')
+  const [isCreatingFirm, setIsCreatingFirm] = useState(false)
+  const [firmAddError, setFirmAddError] = useState(null)
 
-  function handleFileChange(e) {
-    const selected = e.target.files?.[0] || null
-    applyFile(selected)
+  const [showAddAdvisor, setShowAddAdvisor] = useState(false)
+  const [newAdvisorName, setNewAdvisorName] = useState('')
+  const [isCreatingAdvisor, setIsCreatingAdvisor] = useState(false)
+  const [advisorAddError, setAdvisorAddError] = useState(null)
+
+  function clearError(key) {
+    setErrors((prev) => (prev[key] ? { ...prev, [key]: '' } : prev))
   }
 
   function applyFile(selected) {
-    if (selected) {
-      if (!validateFileExtension(selected.name)) {
-        setErrors((prev) => ({
-          ...prev,
-          file: `Unsupported file type. Accepted formats: ${ACCEPTED_EXTENSIONS.join(', ')}`,
-        }))
-        setFile(null)
-        return
-      }
-      setFile(selected)
-      setErrors((prev) => ({ ...prev, file: '' }))
+    if (!selected) return
+    if (!validateFileExtension(selected.name)) {
+      setErrors((prev) => ({
+        ...prev,
+        file: `Unsupported file type. Accepted formats: ${ACCEPTED_EXTENSIONS.join(', ')}`,
+      }))
+      setFile(null)
+      return
+    }
+    setFile(selected)
+    clearError('file')
+  }
+
+  function toggleAddFirm() {
+    setShowAddFirm((v) => !v)
+    setNewFirmName('')
+    setFirmAddError(null)
+  }
+
+  function toggleAddAdvisor() {
+    setShowAddAdvisor((v) => !v)
+    setNewAdvisorName('')
+    setAdvisorAddError(null)
+  }
+
+  async function handleCreateFirm() {
+    const name = newFirmName.trim()
+    if (!name) {
+      setFirmAddError('Firm name is required.')
+      return
+    }
+    if (!onCreateFirm) return
+    setIsCreatingFirm(true)
+    setFirmAddError(null)
+    try {
+      await onCreateFirm(name)
+      setNewFirmName('')
+      setShowAddFirm(false)
+    } catch (err) {
+      setFirmAddError(err?.message || 'Failed to create firm.')
+    } finally {
+      setIsCreatingFirm(false)
     }
   }
 
-  function handleDragOver(e) {
-    e.preventDefault()
-    setIsDragOver(true)
-  }
-
-  function handleDragLeave() {
-    setIsDragOver(false)
-  }
-
-  function handleDrop(e) {
-    e.preventDefault()
-    setIsDragOver(false)
-    const dropped = e.dataTransfer.files?.[0] || null
-    applyFile(dropped)
+  async function handleCreateAdvisor() {
+    const name = newAdvisorName.trim()
+    if (!name) {
+      setAdvisorAddError('Advisor name is required.')
+      return
+    }
+    if (!selectedFirmId) {
+      setAdvisorAddError('Select a firm first.')
+      return
+    }
+    if (!onCreateAdvisor) return
+    setIsCreatingAdvisor(true)
+    setAdvisorAddError(null)
+    try {
+      await onCreateAdvisor(name, selectedFirmId)
+      setNewAdvisorName('')
+      setShowAddAdvisor(false)
+    } catch (err) {
+      setAdvisorAddError(err?.message || 'Failed to create advisor.')
+    } finally {
+      setIsCreatingAdvisor(false)
+    }
   }
 
   function validate() {
-    const newErrors = {}
-    if (!fields.advisorName.trim()) newErrors.advisorName = 'Advisor name is required.'
-    if (!fields.firm.trim()) newErrors.firm = 'Firm name is required.'
-    if (!fields.prospectName.trim()) newErrors.prospectName = 'Prospect name is required.'
-    if (!file) newErrors.file = 'Please select a recording file.'
-    return newErrors
+    const errs = {}
+    if (isBds) {
+      if (!selectedFirmId) errs.firm = 'Please select a firm.'
+      if (!selectedAdvisorId) errs.advisor = 'Please select an advisor.'
+    }
+    if (!prospectName.trim()) errs.prospectName = 'Prospect name is required.'
+    if (!file) errs.file = 'Please select a recording file.'
+    return errs
   }
 
   function handleSubmit(e) {
@@ -82,91 +136,164 @@ export default function UploadForm({ onSubmit, isLoading }) {
       setErrors(validationErrors)
       return
     }
-
     const formData = new FormData()
-    formData.append('advisor_name', fields.advisorName.trim())
-    formData.append('firm', fields.firm.trim())
-    formData.append('prospect_name', fields.prospectName.trim())
-    formData.append('bds_rep', fields.bdsRep.trim())
+    formData.append('prospect_name', prospectName.trim())
     formData.append('file', file)
-
+    if (isBds) {
+      formData.append('firm_id', selectedFirmId)
+      formData.append('advisor_user_id', selectedAdvisorId)
+    }
     onSubmit(formData)
   }
 
   return (
     <form className="upload-form" onSubmit={handleSubmit} noValidate>
       <div className="upload-form__fields">
-        <div className="upload-form__field">
-          <label htmlFor="advisorName" className="upload-form__label">
-            Advisor Name
-          </label>
-          <input
-            id="advisorName"
-            name="advisorName"
-            type="text"
-            className={`upload-form__input${errors.advisorName ? ' upload-form__input--error' : ''}`}
-            placeholder="e.g. Sarah Johnson"
-            value={fields.advisorName}
-            onChange={handleFieldChange}
-            disabled={isLoading}
-          />
-          {errors.advisorName && (
-            <span className="upload-form__error">{errors.advisorName}</span>
-          )}
-        </div>
+        {isBds ? (
+          <>
+            <div className="upload-form__field">
+              <div className="upload-form__field-header">
+                <label htmlFor="firm-select" className="upload-form__label">Firm</label>
+                <button
+                  type="button"
+                  className="upload-form__inline-add"
+                  onClick={toggleAddFirm}
+                  disabled={isLoading}
+                >
+                  {showAddFirm ? 'Cancel' : '+ New'}
+                </button>
+              </div>
+              <SearchableSelect
+                id="firm-select"
+                options={firms.map((f) => ({ value: f.id, label: f.name }))}
+                value={selectedFirmId}
+                onChange={(firmId) => {
+                  onSelectFirm?.(firmId)
+                  onSelectAdvisor?.('')
+                  clearError('firm')
+                  if (firmId) onFirmChange?.(firmId)
+                }}
+                placeholder="Select a firm…"
+                disabled={isLoading}
+                hasError={!!errors.firm}
+              />
+              {showAddFirm && (
+                <div className="upload-form__add-row">
+                  <input
+                    className="upload-form__input"
+                    placeholder="New firm name"
+                    value={newFirmName}
+                    onChange={(e) => { setNewFirmName(e.target.value); setFirmAddError(null) }}
+                    disabled={isCreatingFirm}
+                  />
+                  <button
+                    type="button"
+                    className="upload-form__add-btn"
+                    onClick={handleCreateFirm}
+                    disabled={isCreatingFirm}
+                  >
+                    {isCreatingFirm ? 'Adding…' : 'Add'}
+                  </button>
+                </div>
+              )}
+              {firmAddError && <span className="upload-form__error">{firmAddError}</span>}
+              {errors.firm && <span className="upload-form__error">{errors.firm}</span>}
+            </div>
+
+            <div className="upload-form__field">
+              <div className="upload-form__field-header">
+                <label htmlFor="advisor-select" className="upload-form__label">Advisor</label>
+                <button
+                  type="button"
+                  className="upload-form__inline-add"
+                  onClick={toggleAddAdvisor}
+                  disabled={isLoading || !selectedFirmId}
+                  title={!selectedFirmId ? 'Select a firm first' : undefined}
+                >
+                  {showAddAdvisor ? 'Cancel' : '+ New'}
+                </button>
+              </div>
+              <SearchableSelect
+                id="advisor-select"
+                options={firmAdvisors.map((a) => ({ value: a.id, label: a.name }))}
+                value={selectedAdvisorId}
+                onChange={(advisorId) => {
+                  onSelectAdvisor?.(advisorId)
+                  clearError('advisor')
+                }}
+                placeholder={
+                  !selectedFirmId
+                    ? 'Select a firm first'
+                    : firmAdvisors.length === 0
+                    ? 'No advisors at this firm'
+                    : 'Select an advisor…'
+                }
+                disabled={isLoading || !selectedFirmId}
+                hasError={!!errors.advisor}
+              />
+              {showAddAdvisor && (
+                <div className="upload-form__add-row">
+                  <input
+                    className="upload-form__input"
+                    placeholder="New advisor name"
+                    value={newAdvisorName}
+                    onChange={(e) => { setNewAdvisorName(e.target.value); setAdvisorAddError(null) }}
+                    disabled={isCreatingAdvisor}
+                  />
+                  <button
+                    type="button"
+                    className="upload-form__add-btn"
+                    onClick={handleCreateAdvisor}
+                    disabled={isCreatingAdvisor}
+                  >
+                    {isCreatingAdvisor ? 'Adding…' : 'Add'}
+                  </button>
+                </div>
+              )}
+              {advisorAddError && <span className="upload-form__error">{advisorAddError}</span>}
+              {errors.advisor && <span className="upload-form__error">{errors.advisor}</span>}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="upload-form__field">
+              <label htmlFor="advisor-name" className="upload-form__label">Advisor Name</label>
+              <input
+                id="advisor-name"
+                type="text"
+                className="upload-form__input upload-form__input--readonly"
+                value={userName || ''}
+                readOnly
+              />
+            </div>
+            <div className="upload-form__field">
+              <label htmlFor="firm-name" className="upload-form__label">Firm</label>
+              <input
+                id="firm-name"
+                type="text"
+                className="upload-form__input upload-form__input--readonly"
+                value={userFirmName || ''}
+                readOnly
+              />
+            </div>
+          </>
+        )}
 
         <div className="upload-form__field">
-          <label htmlFor="firm" className="upload-form__label">
-            Firm Name
-          </label>
-          <input
-            id="firm"
-            name="firm"
-            type="text"
-            className={`upload-form__input${errors.firm ? ' upload-form__input--error' : ''}`}
-            placeholder="e.g. Meridian Wealth Advisors"
-            value={fields.firm}
-            onChange={handleFieldChange}
-            disabled={isLoading}
-          />
-          {errors.firm && (
-            <span className="upload-form__error">{errors.firm}</span>
-          )}
-        </div>
-
-        <div className="upload-form__field">
-          <label htmlFor="prospectName" className="upload-form__label">
-            Prospect Name
-          </label>
+          <label htmlFor="prospectName" className="upload-form__label">Prospect Name</label>
           <input
             id="prospectName"
             name="prospectName"
             type="text"
             className={`upload-form__input${errors.prospectName ? ' upload-form__input--error' : ''}`}
             placeholder="e.g. Michael Torres"
-            value={fields.prospectName}
-            onChange={handleFieldChange}
+            value={prospectName}
+            onChange={(e) => { setProspectName(e.target.value); clearError('prospectName') }}
             disabled={isLoading}
           />
           {errors.prospectName && (
             <span className="upload-form__error">{errors.prospectName}</span>
           )}
-        </div>
-
-        <div className="upload-form__field">
-          <label htmlFor="bdsRep" className="upload-form__label">
-            BDS Rep <span className="upload-form__label-optional">(optional)</span>
-          </label>
-          <input
-            id="bdsRep"
-            name="bdsRep"
-            type="text"
-            className="upload-form__input"
-            placeholder="e.g. Jamie Lee"
-            value={fields.bdsRep}
-            onChange={handleFieldChange}
-            disabled={isLoading}
-          />
         </div>
       </div>
 
@@ -174,9 +301,9 @@ export default function UploadForm({ onSubmit, isLoading }) {
         <label className="upload-form__label">Call Recording</label>
         <div
           className={`upload-form__dropzone${isDragOver ? ' upload-form__dropzone--active' : ''}${errors.file ? ' upload-form__dropzone--error' : ''}${file ? ' upload-form__dropzone--has-file' : ''}`}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
+          onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
+          onDragLeave={() => setIsDragOver(false)}
+          onDrop={(e) => { e.preventDefault(); setIsDragOver(false); applyFile(e.dataTransfer.files?.[0]) }}
           onClick={() => !isLoading && fileInputRef.current?.click()}
           role="button"
           tabIndex={0}
@@ -192,7 +319,7 @@ export default function UploadForm({ onSubmit, isLoading }) {
             ref={fileInputRef}
             type="file"
             accept={ACCEPTED_MIME_TYPES}
-            onChange={handleFileChange}
+            onChange={(e) => applyFile(e.target.files?.[0])}
             className="upload-form__file-input"
             disabled={isLoading}
             tabIndex={-1}
@@ -219,17 +346,11 @@ export default function UploadForm({ onSubmit, isLoading }) {
             </div>
           )}
         </div>
-        {errors.file && (
-          <span className="upload-form__error">{errors.file}</span>
-        )}
+        {errors.file && <span className="upload-form__error">{errors.file}</span>}
       </div>
 
-      <button
-        type="submit"
-        className="upload-form__submit"
-        disabled={isLoading}
-      >
-        {isLoading ? 'Processing...' : 'Upload & Review'}
+      <button type="submit" className="upload-form__submit" disabled={isLoading}>
+        {isLoading ? 'Processing…' : 'Upload & Review'}
       </button>
     </form>
   )

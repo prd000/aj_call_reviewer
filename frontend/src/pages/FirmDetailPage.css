@@ -1,0 +1,204 @@
+.firm-detail-page {
+  padding: var(--space-xl) 0 var(--space-section);
+}
+
+.firm-detail-page__loading,
+.firm-detail-page__load-error {
+  padding: var(--space-xl) 0;
+  color: var(--color-muted);
+  font-size: 14px;
+}
+
+.firm-detail-page__back {
+  font-size: 13px;
+  color: var(--color-muted);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  margin-bottom: var(--space-md);
+  font-family: var(--font-family);
+  transition: color var(--transition-fast);
+}
+
+.firm-detail-page__back:hover {
+  color: var(--color-primary);
+}
+
+.firm-detail-page__title {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--color-on-dark);
+  margin-bottom: var(--space-xl);
+}
+
+.firm-detail-page__section {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-xl);
+  padding: var(--space-xl);
+  margin-bottom: var(--space-lg);
+}
+
+.firm-detail-page__section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-on-dark);
+  margin-bottom: var(--space-lg);
+}
+
+.firm-detail-page__section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-lg);
+}
+
+.firm-detail-page__section-header .firm-detail-page__section-title {
+  margin-bottom: 0;
+}
+
+.firm-detail-page__settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.firm-detail-page__save-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.firm-detail-page__add-form {
+  background-color: var(--color-surface-elevated);
+  border-radius: var(--rounded-md);
+  padding: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+.firm-detail-page__add-row {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.firm-detail-page__add-row .upload-form__input {
+  flex: 1;
+  min-width: 180px;
+}
+
+.firm-detail-page__empty {
+  font-size: 14px;
+  color: var(--color-muted);
+}
+
+.firm-detail-page__user-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background-color: var(--color-hairline);
+  border-radius: var(--rounded-lg);
+  overflow: hidden;
+}
+
+.user-row {
+  background-color: var(--color-surface);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-md) var(--space-lg);
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.user-row__info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.user-row__name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-on-dark);
+}
+
+.user-row__email {
+  font-size: 13px;
+  color: var(--color-muted);
+}
+
+.user-row__status {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px var(--space-xs);
+  border-radius: var(--rounded-pill);
+}
+
+.user-row__status--active {
+  background-color: rgba(14, 203, 129, 0.12);
+  color: var(--color-success);
+}
+
+.user-row__status--inactive {
+  background-color: rgba(112, 122, 138, 0.15);
+  color: var(--color-muted);
+}
+
+.user-row__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-shrink: 0;
+}
+
+.user-row__status--advisor-only {
+  background-color: rgba(252, 213, 53, 0.12);
+  color: var(--color-primary);
+}
+
+.user-row__invite-input {
+  height: 36px;
+  width: 220px;
+  font-size: 13px;
+}
+
+.firm-detail-page__invite-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: 13px;
+  color: var(--color-muted);
+  margin-top: var(--space-xs);
+  cursor: pointer;
+  user-select: none;
+}
+
+.firm-detail-page__invite-toggle input[type="checkbox"] {
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.firm-detail-page__danger-zone {
+  border-color: rgba(246, 70, 93, 0.3);
+}
+
+.firm-detail-page__confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.firm-detail-page__confirm-text {
+  font-size: 14px;
+  color: var(--color-body);
+}
+
+.firm-detail-page__confirm-actions {
+  display: flex;
+  gap: var(--space-sm);
+}

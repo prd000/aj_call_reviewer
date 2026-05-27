@@ -1,14 +1,17 @@
 import os
-from supabase import create_client, Client
 
-_client: Client | None = None
+import httpx
+from supabase import acreate_client, AsyncClient, ClientOptions
+
+_client: AsyncClient | None = None
 
 
-def get_client() -> Client:
+async def get_client() -> AsyncClient:
     global _client
     if _client is None:
-        _client = create_client(
+        _client = await acreate_client(
             os.environ["SUPABASE_URL"],
             os.environ["SUPABASE_KEY"],
+            options=ClientOptions(httpx_client=httpx.AsyncClient(timeout=10.0)),
         )
     return _client

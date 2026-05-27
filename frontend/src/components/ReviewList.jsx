@@ -22,16 +22,18 @@ function formatDate(isoString) {
   }
 }
 
-function ScoreBadge({ score }) {
+function ScoreBadge({ score, maxScore }) {
   if (score === null || score === undefined) {
     return <span className="review-list-item__badge review-list-item__badge--pending">Pending</span>
   }
+  const effectiveMax = maxScore || 10
+  const ratio = score / effectiveMax
   let cls = 'review-list-item__badge'
-  if (score >= 7) cls += ' review-list-item__badge--high'
-  else if (score >= 4) cls += ' review-list-item__badge--mid'
+  if (ratio >= 0.7) cls += ' review-list-item__badge--high'
+  else if (ratio >= 0.4) cls += ' review-list-item__badge--mid'
   else cls += ' review-list-item__badge--low'
 
-  return <span className={cls}>{score}/10</span>
+  return <span className={cls}>{score}/{effectiveMax}</span>
 }
 
 function TrashIcon() {
@@ -43,7 +45,7 @@ function TrashIcon() {
 }
 
 function ReviewListItem({ review, onClick, onDelete }) {
-  const { metadata, created_at, overall_score, status } = review
+  const { metadata, created_at, overall_score, overall_max_score, status } = review
   const [showConfirm, setShowConfirm] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
 
@@ -99,9 +101,6 @@ function ReviewListItem({ review, onClick, onDelete }) {
         </div>
         <div className="review-list-item__secondary">
           <span className="review-list-item__prospect">Prospect: {metadata?.prospect_name || '—'}</span>
-          {metadata?.bds_rep && (
-            <span className="review-list-item__bds-rep">BDS: {metadata.bds_rep}</span>
-          )}
           <span className="review-list-item__date">{formatDate(created_at)}</span>
         </div>
       </div>
@@ -142,7 +141,7 @@ function ReviewListItem({ review, onClick, onDelete }) {
         </div>
       ) : (
         <div className="review-list-item__right">
-          <ScoreBadge score={overall_score} />
+          <ScoreBadge score={overall_score} maxScore={overall_max_score} />
           <button
             className="review-list-item__delete-btn"
             onClick={handleDeleteClick}
@@ -157,11 +156,10 @@ function ReviewListItem({ review, onClick, onDelete }) {
   )
 }
 
-export default function ReviewList({ reviews, filterRep, filterFirm, filterAdvisor, searchQuery, onDelete }) {
+export default function ReviewList({ reviews, filterFirm, filterAdvisor, searchQuery, onDelete }) {
   const navigate = useNavigate()
 
   const filtered = reviews.filter((r) => {
-    if (filterRep && r.metadata?.bds_rep !== filterRep) return false
     if (filterFirm && r.metadata?.firm !== filterFirm) return false
     if (filterAdvisor && r.metadata?.advisor_name !== filterAdvisor) return false
     if (searchQuery) {
@@ -170,7 +168,6 @@ export default function ReviewList({ reviews, filterRep, filterFirm, filterAdvis
         r.metadata?.advisor_name,
         r.metadata?.firm,
         r.metadata?.prospect_name,
-        r.metadata?.bds_rep,
       ].filter(Boolean).join(' ').toLowerCase()
       if (!searchable.includes(q)) return false
     }

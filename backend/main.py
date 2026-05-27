@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from modules.templates import migrate_default_template
-from routers import upload, reviews, templates
+from routers import upload, reviews, templates, management
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
@@ -17,7 +17,7 @@ ALLOWED_ORIGINS = ["http://localhost:5173"] + _extra_origins
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    migrate_default_template()
+    await migrate_default_template()
     yield
 
 
@@ -34,6 +34,7 @@ app.add_middleware(
 app.include_router(upload.router, prefix="/api")
 app.include_router(reviews.router, prefix="/api")
 app.include_router(templates.router, prefix="/api")
+app.include_router(management.router, prefix="/api")
 
 
 @app.get("/health")

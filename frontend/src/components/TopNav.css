@@ -49,3 +49,32 @@
   color: var(--color-primary);
   border-bottom-color: var(--color-primary);
 }
+
+.top-nav__user {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.top-nav__user-name {
+  font-size: 13px;
+  color: var(--color-muted);
+}
+
+.top-nav__logout {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-body);
+  background: none;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-sm);
+  padding: 4px var(--space-sm);
+  cursor: pointer;
+  font-family: var(--font-family);
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.top-nav__logout:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}

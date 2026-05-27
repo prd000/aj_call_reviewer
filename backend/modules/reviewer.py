@@ -22,7 +22,7 @@ CRITERION_PROMPT_TEMPLATE = (
     "Criteria: {description}\n\n"
     "You know this has been successfully accomplished when: {success_condition}\n\n"
     "Respond with a JSON object in this exact format:\n"
-    '{{"score": <integer 1-10>, "feedback": "<2-3 sentences of coaching feedback>"}}\n\n'
+    '{{"score": <integer 1-{max_score}>, "feedback": "<2-3 sentences of coaching feedback>"}}\n\n'
     "Do not include anything outside the JSON object."
 )
 
@@ -38,6 +38,7 @@ STUB_REVIEW = {
         {
             "name": "Rapport Building",
             "score": 8,
+            "max_score": 10,
             "feedback": (
                 "The advisor opened warmly and created a comfortable atmosphere for the "
                 "prospect to share openly. Good use of affirmations and acknowledgment of "
@@ -48,6 +49,7 @@ STUB_REVIEW = {
         {
             "name": "Needs Discovery",
             "score": 7,
+            "max_score": 10,
             "feedback": (
                 "Strong questioning technique with good use of open-ended questions about "
                 "retirement timeline and existing accounts. The advisor uncovered the "
@@ -58,6 +60,7 @@ STUB_REVIEW = {
         {
             "name": "Solution Presentation",
             "score": 6,
+            "max_score": 10,
             "feedback": (
                 "The advisor referenced a 'comprehensive income strategy' but didn't "
                 "elaborate on specifics or make it tangible for the prospect. Present "
@@ -69,6 +72,7 @@ STUB_REVIEW = {
         {
             "name": "Objection Handling",
             "score": 5,
+            "max_score": 10,
             "feedback": (
                 "No direct objections were raised in this call, so the advisor did not "
                 "have a chance to demonstrate objection handling skills. Proactively "
@@ -178,9 +182,11 @@ def review_call(transcript: list[dict], criteria: list[dict]) -> dict:
         categories = []
 
         for criterion in criteria:
+            max_score = criterion.get("max_score", 10)
             system_prompt = CRITERION_PROMPT_TEMPLATE.format(
                 description=criterion["description"],
                 success_condition=criterion["success_condition"],
+                max_score=max_score,
             )
             messages = [
                 SystemMessage(content=system_prompt),
@@ -200,6 +206,7 @@ def review_call(transcript: list[dict], criteria: list[dict]) -> dict:
                 {
                     "name": criterion.get("title") or criterion["description"][:60],
                     "score": int(parsed["score"]),
+                    "max_score": max_score,
                     "feedback": parsed["feedback"],
                 }
             )
@@ -212,7 +219,7 @@ def review_call(transcript: list[dict], criteria: list[dict]) -> dict:
             "Return only the summary text, no JSON."
         )
         scores_text = "\n".join(
-            f"- {c['name']}: {c['score']}/10 — {c['feedback']}"
+            f"- {c['name']}: {c['score']}/{c.get('max_score', 10)} — {c['feedback']}"
             for c in categories
         )
         summary_messages = [

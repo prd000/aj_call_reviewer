@@ -19,7 +19,6 @@ def _to_row(review: dict) -> dict:
         "advisor_name": metadata.get("advisor_name"),
         "firm": metadata.get("firm"),
         "prospect_name": metadata.get("prospect_name"),
-        "bds_rep": metadata.get("bds_rep"),
         "original_filename": metadata.get("original_filename"),
         "speaker_map": review.get("speaker_map"),
         "transcript": review.get("transcript"),
@@ -28,6 +27,9 @@ def _to_row(review: dict) -> dict:
         "error_message": review.get("error_message"),
         "storage_path": review.get("storage_path"),
         "celery_task_id": review.get("celery_task_id"),
+        "firm_id": review.get("firm_id"),
+        "uploaded_by": review.get("uploaded_by"),
+        "uploader_role": review.get("uploader_role"),
     }
 
 
@@ -40,7 +42,7 @@ def _from_row(row: dict) -> dict:
             "advisor_name": row.get("advisor_name"),
             "firm": row.get("firm"),
             "prospect_name": row.get("prospect_name"),
-            "bds_rep": row.get("bds_rep"),
+            "bds_rep": row.get("bds_rep"),  # retained for pre-auth legacy records
             "original_filename": row.get("original_filename"),
         },
         "speaker_map": row.get("speaker_map"),
@@ -50,38 +52,56 @@ def _from_row(row: dict) -> dict:
         "error_message": row.get("error_message"),
         "storage_path": row.get("storage_path"),
         "celery_task_id": row.get("celery_task_id"),
+        "firm_id": row.get("firm_id"),
+        "uploaded_by": row.get("uploaded_by"),
+        "uploader_role": row.get("uploader_role"),
     }
 
 
-def save_review(review: dict) -> str:
+async def save_review(review: dict) -> str:
     """Upsert a review record to Supabase. Returns the review id."""
-    get_client().table("reviews").upsert(_to_row(review)).execute()
+    client = await get_client()
+    await client.table("reviews").upsert(_to_row(review)).execute()
     return review["id"]
 
 
-def get_review(review_id: str) -> dict | None:
+async def get_review(review_id: str) -> dict | None:
     """Fetch a review record from Supabase by id. Returns None if not found."""
-    result = get_client().table("reviews").select("*").eq("id", review_id).execute()
+    client = await get_client()
+    result = await client.table("reviews").select("*").eq("id", review_id).execute()
     if not result.data:
         return None
     return _from_row(result.data[0])
 
 
-def list_reviews() -> list[dict]:
-    """Fetch all review records from Supabase, sorted by created_at descending."""
-    result = get_client().table("reviews").select("*").order("created_at", desc=True).execute()
+async def list_reviews(
+    firm_id: str | None = None,
+    uploader_role: str | None = None,
+) -> list[dict]:
+    """Fetch review records from Supabase, sorted by created_at descending.
+
+    Pass firm_id and/or uploader_role to filter to a specific audience (FA visibility rule).
+    """
+    client = await get_client()
+    query = client.table("reviews").select("*").order("created_at", desc=True)
+    if firm_id is not None:
+        query = query.eq("firm_id", firm_id)
+    if uploader_role is not None:
+        query = query.eq("uploader_role", uploader_role)
+    result = await query.execute()
     return [_from_row(row) for row in result.data]
 
 
-def delete_review(review_id: str) -> None:
+async def delete_review(review_id: str) -> None:
     """Delete a review record from Supabase. Raises FileNotFoundError if not found."""
-    existing = get_client().table("reviews").select("id").eq("id", review_id).execute()
+    client = await get_client()
+    existing = await client.table("reviews").select("id").eq("id", review_id).execute()
     if not existing.data:
         raise FileNotFoundError(f"Review '{review_id}' not found.")
-    get_client().table("reviews").delete().eq("id", review_id).execute()
+    await client.table("reviews").delete().eq("id", review_id).execute()
 
 
-def update_review_status(
+async def update_review_status(
     review_id: str,
     status: str,
     *,
@@ -89,25 +109,28 @@ def update_review_status(
     celery_task_id: str | None = None,
 ) -> None:
     """Partial update of a review's status and optional fields."""
+    client = await get_client()
     patch: dict = {"status": status}
     if error_message is not None:
         patch["error_message"] = error_message
     if celery_task_id is not None:
         patch["celery_task_id"] = celery_task_id
-    get_client().table("reviews").update(patch).eq("id", review_id).execute()
+    await client.table("reviews").update(patch).eq("id", review_id).execute()
 
 
-def upload_recording_to_storage(review_id: str, file_bytes: bytes, filename: str) -> str:
+async def upload_recording_to_storage(review_id: str, file_bytes: bytes, filename: str) -> str:
     """Upload a recording to Supabase Storage. Returns the storage path."""
+    client = await get_client()
     safe_name = Path(filename).name
     path = f"{review_id}/{safe_name}"
-    get_client().storage.from_(STORAGE_BUCKET).upload(path=path, file=file_bytes)
+    await client.storage.from_(STORAGE_BUCKET).upload(path=path, file=file_bytes)
     return path
 
 
-def get_recording_signed_url(storage_path: str) -> str:
+async def get_recording_signed_url(storage_path: str) -> str:
     """Return a signed URL for the recording, valid for 1 hour."""
-    result = get_client().storage.from_(STORAGE_BUCKET).create_signed_url(
+    client = await get_client()
+    result = await client.storage.from_(STORAGE_BUCKET).create_signed_url(
         path=storage_path,
         expires_in=3600,
     )
@@ -116,10 +139,11 @@ def get_recording_signed_url(storage_path: str) -> str:
     return str(getattr(result, "signed_url", "") or getattr(result, "signedURL", ""))
 
 
-def delete_recording_from_storage(storage_path: str) -> None:
+async def delete_recording_from_storage(storage_path: str) -> None:
     """Delete a recording from Supabase Storage. Silent if not found."""
     try:
-        get_client().storage.from_(STORAGE_BUCKET).remove([storage_path])
+        client = await get_client()
+        await client.storage.from_(STORAGE_BUCKET).remove([storage_path])
     except Exception:
         pass
 

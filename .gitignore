@@ -8,7 +8,7 @@ env.bak/
 venv.bak/
 
 # Project context and docs
-context/
+/context/
 CLAUDE.md
 
 # Claude Code
@@ -33,8 +33,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
 lib64/
+/lib/
 parts/
 sdist/
 var/

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   listTemplates,
   getTemplate,
@@ -6,8 +6,63 @@ import {
   updateTemplate,
   deleteTemplate,
 } from '../services/api'
+import { useLoadingWatchdog } from '../hooks/useLoadingWatchdog'
 import CriteriaCard from './CriteriaCard'
 import './TemplateManager.css'
+
+const ALLOWED_TEMPLATE_KEYS = new Set(['name', 'criteria'])
+const ALLOWED_CRITERION_KEYS = new Set(['id', 'title', 'description', 'success_condition', 'max_score'])
+
+function validateImportedTemplate(parsed) {
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { ok: false, error: 'JSON must be an object with "name" and "criteria".' }
+  }
+  for (const key of Object.keys(parsed)) {
+    if (!ALLOWED_TEMPLATE_KEYS.has(key)) {
+      return { ok: false, error: `Unknown top-level field "${key}". Allowed: name, criteria.` }
+    }
+  }
+  if (typeof parsed.name !== 'string' || parsed.name.trim() === '') {
+    return { ok: false, error: '"name" must be a non-empty string.' }
+  }
+  if (!Array.isArray(parsed.criteria) || parsed.criteria.length === 0) {
+    return { ok: false, error: '"criteria" must be a non-empty array.' }
+  }
+  const criteria = []
+  for (let i = 0; i < parsed.criteria.length; i++) {
+    const c = parsed.criteria[i]
+    if (c === null || typeof c !== 'object' || Array.isArray(c)) {
+      return { ok: false, error: `criteria[${i}] must be an object.` }
+    }
+    for (const key of Object.keys(c)) {
+      if (!ALLOWED_CRITERION_KEYS.has(key)) {
+        return { ok: false, error: `criteria[${i}] has unknown field "${key}".` }
+      }
+    }
+    if (typeof c.description !== 'string' || c.description.trim() === '') {
+      return { ok: false, error: `criteria[${i}].description must be a non-empty string.` }
+    }
+    if (typeof c.success_condition !== 'string' || c.success_condition.trim() === '') {
+      return { ok: false, error: `criteria[${i}].success_condition must be a non-empty string.` }
+    }
+    if (c.title !== undefined && typeof c.title !== 'string') {
+      return { ok: false, error: `criteria[${i}].title must be a string if present.` }
+    }
+    if (c.max_score !== undefined) {
+      if (!Number.isInteger(c.max_score) || c.max_score < 1 || c.max_score > 10) {
+        return { ok: false, error: `criteria[${i}].max_score must be an integer between 1 and 10 if present.` }
+      }
+    }
+    criteria.push({
+      id: crypto.randomUUID(),
+      ...(c.title !== undefined ? { title: c.title } : {}),
+      description: c.description,
+      success_condition: c.success_condition,
+      max_score: c.max_score ?? 10,
+    })
+  }
+  return { ok: true, template: { name: parsed.name, criteria } }
+}
 
 export default function TemplateManager({ onCriteriaChange }) {
   const [templates, setTemplates] = useState([])
@@ -21,6 +76,8 @@ export default function TemplateManager({ onCriteriaChange }) {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
+  const fileInputRef = useRef(null)
+  useLoadingWatchdog(isLoading, setIsLoading, { label: 'template-manager' })
 
   useEffect(() => {
     initTemplates()
@@ -168,6 +225,64 @@ export default function TemplateManager({ onCriteriaChange }) {
     }
   }
 
+  function handleImportClick() {
+    fileInputRef.current?.click()
+  }
+
+  async function handleFileChange(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setError(null)
+    try {
+      const text = await file.text()
+      let parsed
+      try {
+        parsed = JSON.parse(text)
+      } catch (parseErr) {
+        setError(`Invalid JSON: ${parseErr.message}`)
+        return
+      }
+      const result = validateImportedTemplate(parsed)
+      if (!result.ok) {
+        setError(`Import failed: ${result.error}`)
+        return
+      }
+      setSelectedId('new')
+      setActiveName(result.template.name)
+      setActiveCriteria(result.template.criteria)
+      setOriginalName('')
+      setOriginalCriteria([])
+      setIsDirty(true)
+      setDeleteConfirmOpen(false)
+      setIsAddingCriteria(false)
+      onCriteriaChange(result.template.criteria, result.template.name, null)
+    } catch (err) {
+      setError(`Could not read file: ${err.message}`)
+    }
+  }
+
+  function handleExport() {
+    const payload = {
+      name: activeName,
+      criteria: activeCriteria.map(c => ({
+        ...(c.title !== undefined ? { title: c.title } : {}),
+        description: c.description,
+        success_condition: c.success_condition,
+        max_score: c.max_score ?? 10,
+      })),
+    }
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${(activeName || 'template').replace(/[^a-z0-9_-]+/gi, '_').toLowerCase() || 'template'}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   const canSave = isDirty && activeName.trim().length > 0 && activeCriteria.length > 0
   const canDiscard = isDirty && selectedId !== 'new'
 
@@ -186,6 +301,30 @@ export default function TemplateManager({ onCriteriaChange }) {
           {error}
         </div>
       )}
+
+      <div className="template-manager__io">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/json,.json"
+          onChange={handleFileChange}
+          style={{ display: 'none' }}
+        />
+        <button
+          className="template-manager__btn template-manager__btn--secondary"
+          onClick={handleImportClick}
+        >
+          Import JSON
+        </button>
+        <button
+          className="template-manager__btn template-manager__btn--secondary"
+          onClick={handleExport}
+          disabled={selectedId === 'new' || activeCriteria.length === 0}
+          title="Download this template as JSON"
+        >
+          Download JSON
+        </button>
+      </div>
 
       <div className="template-manager__controls">
         <select
