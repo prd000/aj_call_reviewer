@@ -154,6 +154,15 @@ export async function getCurrentUserProfile(accessToken) {
   return handleResponse(response)
 }
 
+export async function markPasswordSet() {
+  const headers = { ...(await authHeaders()), 'Content-Type': 'application/json' }
+  const response = await apiFetch(`${BASE_URL}/users/me/password-set`, {
+    method: 'POST',
+    headers,
+  })
+  return handleResponse(response)
+}
+
 // ── Firms ─────────────────────────────────────────────────────────────────────
 
 export async function listFirms() {

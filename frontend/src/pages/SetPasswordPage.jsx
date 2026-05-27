@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { updateUser } from '../lib/supabaseAuth'
+import { markPasswordSet } from '../services/api'
 import './LoginPage.css'
 import './SetPasswordPage.css'
 
@@ -11,7 +12,7 @@ export default function SetPasswordPage() {
   const [error, setError] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
   const [success, setSuccess] = useState(false)
-  const { session, loading } = useAuth()
+  const { session, loading, refreshUser } = useAuth()
   const navigate = useNavigate()
 
   if (loading) return <div className="auth-loading"><span className="auth-loading__spinner" /></div>
@@ -48,6 +49,14 @@ export default function SetPasswordPage() {
     try {
       const { error: updateError } = await updateUser({ password })
       if (updateError) throw updateError
+      try {
+        await markPasswordSet()
+        await refreshUser()
+      } catch (markErr) {
+        // The Supabase password write succeeded — don't block redirect on a
+        // profile-flag failure. Next /users/me fetch will catch the user up.
+        console.warn('markPasswordSet failed; continuing:', markErr)
+      }
       setSuccess(true)
       setTimeout(() => navigate('/'), 1500)
     } catch (err) {

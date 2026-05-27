@@ -12,6 +12,7 @@ from modules.user_profiles import (
     delete_user,
     get_profile,
     list_bds_reps,
+    mark_password_set,
     promote_advisor_to_user,
     set_active,
     update_profile,
@@ -100,6 +101,14 @@ async def get_me(user: dict = Depends(get_current_user)):
         profile["firm_name"] = firm["name"] if firm else None
     else:
         profile["firm_name"] = None
+    return profile
+
+
+@router.post("/users/me/password-set")
+async def confirm_password_set(user: dict = Depends(get_current_user)):
+    profile = await mark_password_set(user["user_id"])
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Profile not found")
     return profile
 
 

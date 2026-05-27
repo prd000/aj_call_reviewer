@@ -47,6 +47,7 @@ async def create_user(email: str, name: str, role: str, firm_id: str | None = No
         "role": role,
         "firm_id": firm_id,
         "is_active": True,
+        "has_set_password": False,
         "created_at": now,
         "updated_at": now,
     }
@@ -74,6 +75,7 @@ async def create_advisor_only(name: str, firm_id: str) -> dict:
         "firm_id": firm_id,
         "is_active": True,
         "is_platform_user": False,
+        "has_set_password": False,
         "created_at": now,
         "updated_at": now,
     }
@@ -132,6 +134,7 @@ async def promote_advisor_to_user(user_id: str, email: str) -> dict:
         .update({
             "email": email,
             "is_platform_user": True,
+            "has_set_password": False,
             "updated_at": now,
         })
         .eq("id", user_id)
@@ -139,6 +142,21 @@ async def promote_advisor_to_user(user_id: str, email: str) -> dict:
     )
     if not result.data:
         raise ValueError("Failed to update profile.")
+    return result.data[0]
+
+
+async def mark_password_set(user_id: str) -> dict | None:
+    """Flip `has_set_password=True` after the user successfully chooses a password."""
+    client = await get_client()
+    now = datetime.now(timezone.utc).isoformat()
+    result = await (
+        client.table("profiles")
+        .update({"has_set_password": True, "updated_at": now})
+        .eq("id", user_id)
+        .execute()
+    )
+    if not result.data:
+        return None
     return result.data[0]
 
 

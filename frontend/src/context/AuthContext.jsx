@@ -153,8 +153,15 @@ export function AuthProvider({ children }) {
     if (error) throw error
   }
 
+  async function refreshUser() {
+    const { data: { session: s } } = await getSession()
+    if (!s) return
+    setSession(s)
+    await loadProfile(s)
+  }
+
   return (
-    <AuthContext.Provider value={{ user, session, loading, login, logout, forgotPassword }}>
+    <AuthContext.Provider value={{ user, session, loading, login, logout, forgotPassword, refreshUser }}>
       {children}
     </AuthContext.Provider>
   )
