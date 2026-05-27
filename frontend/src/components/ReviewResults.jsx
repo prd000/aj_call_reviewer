@@ -20,9 +20,9 @@ function getOverallScore(categories) {
   if (!categories || categories.length === 0) return null
   const scored = categories.filter((c) => typeof c.score === 'number')
   if (scored.length === 0) return null
-  const score = scored.reduce((a, c) => a + c.score, 0)
-  const maxScore = scored.reduce((a, c) => a + (c.max_score || 10), 0)
-  return { score, maxScore }
+  const totalScore = scored.reduce((a, c) => a + c.score, 0)
+  const totalMax = scored.reduce((a, c) => a + (c.max_score || 10), 0)
+  return { score: Math.round((totalScore / totalMax) * 100) / 10, maxScore: 10 }
 }
 
 function getOverallScoreClass(ratio) {

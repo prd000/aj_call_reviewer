@@ -18,8 +18,10 @@ def _review_summary(review: dict) -> dict:
     if categories:
         scored = [c for c in categories if isinstance(c.get("score"), (int, float))]
         if scored:
-            overall_score = sum(c["score"] for c in scored)
-            overall_max_score = sum(c.get("max_score", 10) for c in scored)
+            total_score = sum(c["score"] for c in scored)
+            total_max = sum(c.get("max_score", 10) for c in scored)
+            overall_score = round((total_score / total_max) * 10, 1)
+            overall_max_score = 10
 
     return {
         "id": review["id"],
