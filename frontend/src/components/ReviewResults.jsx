@@ -16,19 +16,19 @@ function formatDate(isoString) {
   }
 }
 
-function getAverageScore(categories) {
+function getOverallScore(categories) {
   if (!categories || categories.length === 0) return null
-  const scores = categories
-    .map((c) => c.score)
-    .filter((s) => typeof s === 'number')
-  if (scores.length === 0) return null
-  return Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10
+  const scored = categories.filter((c) => typeof c.score === 'number')
+  if (scored.length === 0) return null
+  const score = scored.reduce((a, c) => a + c.score, 0)
+  const maxScore = scored.reduce((a, c) => a + (c.max_score || 10), 0)
+  return { score, maxScore }
 }
 
-function getAverageScoreClass(score) {
-  if (score === null) return ''
-  if (score >= 7) return 'review-results__avg-score--high'
-  if (score >= 4) return 'review-results__avg-score--mid'
+function getOverallScoreClass(ratio) {
+  if (ratio === null) return ''
+  if (ratio >= 0.7) return 'review-results__avg-score--high'
+  if (ratio >= 0.4) return 'review-results__avg-score--mid'
   return 'review-results__avg-score--low'
 }
 
@@ -37,7 +37,7 @@ export default function ReviewResults({ review }) {
   const categories = reviewData?.categories || []
   const frameworkCriteria = framework?.criteria || []
   const summary = reviewData?.summary || ''
-  const avgScore = getAverageScore(categories)
+  const overallScore = getOverallScore(categories)
 
   return (
     <div className="review-results">
@@ -62,12 +62,12 @@ export default function ReviewResults({ review }) {
           </div>
         </div>
 
-        {avgScore !== null && (
+        {overallScore !== null && (
           <div className="review-results__score-overview">
             <span className="review-results__score-label">Overall Score</span>
-            <span className={`review-results__avg-score ${getAverageScoreClass(avgScore)}`}>
-              {avgScore}
-              <span className="review-results__avg-score-denom">/10</span>
+            <span className={`review-results__avg-score ${getOverallScoreClass(overallScore.score / overallScore.maxScore)}`}>
+              {overallScore.score}
+              <span className="review-results__avg-score-denom">/{overallScore.maxScore}</span>
             </span>
           </div>
         )}
@@ -92,6 +92,7 @@ export default function ReviewResults({ review }) {
                   key={category.name}
                   name={criterionTitle || category.name}
                   score={category.score}
+                  maxScore={category.max_score || 10}
                   feedback={category.feedback}
                 />
               )

@@ -15,6 +15,7 @@ class CriterionBody(BaseModel):
     title: str | None = None
     description: str
     success_condition: str
+    max_score: int | None = None
 
 
 class TemplateBody(BaseModel):
@@ -41,6 +42,7 @@ def _criterion_dict(c: CriterionBody) -> dict:
         "id": c.id or str(uuid.uuid4()),
         "description": c.description,
         "success_condition": c.success_condition,
+        "max_score": c.max_score if c.max_score is not None else 10,
     }
     if c.title is not None:
         d["title"] = c.title

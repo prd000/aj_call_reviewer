@@ -7,20 +7,23 @@ export default function CriteriaCard({ criterion, onUpdate, onDelete, onSave, on
   const [title, setTitle] = useState(criterion?.title ?? '')
   const [description, setDescription] = useState(criterion?.description ?? '')
   const [successCondition, setSuccessCondition] = useState(criterion?.success_condition ?? '')
+  const [maxScore, setMaxScore] = useState(criterion?.max_score ?? 10)
 
   function handleSave() {
     const trimmedTitle = title.trim()
     const trimmedDesc = description.trim()
     const trimmedCond = successCondition.trim()
+    const parsedMax = Math.min(10, Math.max(1, parseInt(maxScore, 10) || 10))
     if (isAddMode) {
       onSave({
         id: crypto.randomUUID(),
         title: trimmedTitle,
         description: trimmedDesc,
         success_condition: trimmedCond,
+        max_score: parsedMax,
       })
     } else {
-      onUpdate({ ...criterion, title: trimmedTitle, description: trimmedDesc, success_condition: trimmedCond })
+      onUpdate({ ...criterion, title: trimmedTitle, description: trimmedDesc, success_condition: trimmedCond, max_score: parsedMax })
       setIsEditing(false)
     }
   }
@@ -32,6 +35,7 @@ export default function CriteriaCard({ criterion, onUpdate, onDelete, onSave, on
       setTitle(criterion.title ?? '')
       setDescription(criterion.description)
       setSuccessCondition(criterion.success_condition)
+      setMaxScore(criterion.max_score ?? 10)
       setIsEditing(false)
     }
   }
@@ -70,6 +74,17 @@ export default function CriteriaCard({ criterion, onUpdate, onDelete, onSave, on
             rows={3}
           />
         </div>
+        <div className="criteria-card__field">
+          <label className="criteria-card__label">Max Score</label>
+          <input
+            className="criteria-card__input criteria-card__input--max-score"
+            type="number"
+            min={1}
+            max={10}
+            value={maxScore}
+            onChange={e => setMaxScore(e.target.value)}
+          />
+        </div>
         <div className="criteria-card__edit-actions">
           <button
             className="criteria-card__btn criteria-card__btn--primary"
@@ -106,6 +121,7 @@ export default function CriteriaCard({ criterion, onUpdate, onDelete, onSave, on
           <span className="criteria-card__success-label">Success when: </span>
           {criterion.success_condition}
         </p>
+        <p className="criteria-card__max-score-label">Out of {criterion.max_score || 10}</p>
       </div>
       <button
         className="criteria-card__delete-btn"

@@ -19,15 +19,29 @@ export default function UploadForm({
   firms = [],
   firmAdvisors = [],
   onFirmChange,
+  selectedFirmId = '',
+  selectedAdvisorId = '',
+  onSelectFirm,
+  onSelectAdvisor,
+  onCreateFirm,
+  onCreateAdvisor,
 }) {
   const isBds = userRole === 'bds_rep'
   const [prospectName, setProspectName] = useState('')
-  const [selectedFirmId, setSelectedFirmId] = useState('')
-  const [selectedAdvisorId, setSelectedAdvisorId] = useState('')
   const [file, setFile] = useState(null)
   const [errors, setErrors] = useState({})
   const [isDragOver, setIsDragOver] = useState(false)
   const fileInputRef = useRef(null)
+
+  const [showAddFirm, setShowAddFirm] = useState(false)
+  const [newFirmName, setNewFirmName] = useState('')
+  const [isCreatingFirm, setIsCreatingFirm] = useState(false)
+  const [firmAddError, setFirmAddError] = useState(null)
+
+  const [showAddAdvisor, setShowAddAdvisor] = useState(false)
+  const [newAdvisorName, setNewAdvisorName] = useState('')
+  const [isCreatingAdvisor, setIsCreatingAdvisor] = useState(false)
+  const [advisorAddError, setAdvisorAddError] = useState(null)
 
   function clearError(key) {
     setErrors((prev) => (prev[key] ? { ...prev, [key]: '' } : prev))
@@ -49,10 +63,66 @@ export default function UploadForm({
 
   function handleFirmChange(e) {
     const firmId = e.target.value
-    setSelectedFirmId(firmId)
-    setSelectedAdvisorId('')
+    onSelectFirm?.(firmId)
+    onSelectAdvisor?.('')
     clearError('firm')
     if (firmId) onFirmChange?.(firmId)
+  }
+
+  function toggleAddFirm() {
+    setShowAddFirm((v) => !v)
+    setNewFirmName('')
+    setFirmAddError(null)
+  }
+
+  function toggleAddAdvisor() {
+    setShowAddAdvisor((v) => !v)
+    setNewAdvisorName('')
+    setAdvisorAddError(null)
+  }
+
+  async function handleCreateFirm() {
+    const name = newFirmName.trim()
+    if (!name) {
+      setFirmAddError('Firm name is required.')
+      return
+    }
+    if (!onCreateFirm) return
+    setIsCreatingFirm(true)
+    setFirmAddError(null)
+    try {
+      await onCreateFirm(name)
+      setNewFirmName('')
+      setShowAddFirm(false)
+    } catch (err) {
+      setFirmAddError(err?.message || 'Failed to create firm.')
+    } finally {
+      setIsCreatingFirm(false)
+    }
+  }
+
+  async function handleCreateAdvisor() {
+    const name = newAdvisorName.trim()
+    if (!name) {
+      setAdvisorAddError('Advisor name is required.')
+      return
+    }
+    if (!selectedFirmId) {
+      setAdvisorAddError('Select a firm first.')
+      return
+    }
+    if (!onCreateAdvisor) return
+    setIsCreatingAdvisor(true)
+    setAdvisorAddError(null)
+    try {
+      await onCreateAdvisor(name, selectedFirmId)
+      setNewAdvisorName('')
+      setShowAddAdvisor(false)
+    } catch (err) {
+      setAdvisorAddError(err?.message || 'Failed to create advisor.')
+    } finally {
+      setIsCreatingAdvisor(false)
+    }
   }
 
   function validate() {
@@ -89,7 +159,17 @@ export default function UploadForm({
         {isBds ? (
           <>
             <div className="upload-form__field">
-              <label htmlFor="firm-select" className="upload-form__label">Firm</label>
+              <div className="upload-form__field-header">
+                <label htmlFor="firm-select" className="upload-form__label">Firm</label>
+                <button
+                  type="button"
+                  className="upload-form__inline-add"
+                  onClick={toggleAddFirm}
+                  disabled={isLoading}
+                >
+                  {showAddFirm ? 'Cancel' : '+ New'}
+                </button>
+              </div>
               <select
                 id="firm-select"
                 className={`upload-form__input upload-form__select${errors.firm ? ' upload-form__input--error' : ''}`}
@@ -102,16 +182,47 @@ export default function UploadForm({
                   <option key={f.id} value={f.id}>{f.name}</option>
                 ))}
               </select>
+              {showAddFirm && (
+                <div className="upload-form__add-row">
+                  <input
+                    className="upload-form__input"
+                    placeholder="New firm name"
+                    value={newFirmName}
+                    onChange={(e) => { setNewFirmName(e.target.value); setFirmAddError(null) }}
+                    disabled={isCreatingFirm}
+                  />
+                  <button
+                    type="button"
+                    className="upload-form__add-btn"
+                    onClick={handleCreateFirm}
+                    disabled={isCreatingFirm}
+                  >
+                    {isCreatingFirm ? 'Adding…' : 'Add'}
+                  </button>
+                </div>
+              )}
+              {firmAddError && <span className="upload-form__error">{firmAddError}</span>}
               {errors.firm && <span className="upload-form__error">{errors.firm}</span>}
             </div>
 
             <div className="upload-form__field">
-              <label htmlFor="advisor-select" className="upload-form__label">Advisor</label>
+              <div className="upload-form__field-header">
+                <label htmlFor="advisor-select" className="upload-form__label">Advisor</label>
+                <button
+                  type="button"
+                  className="upload-form__inline-add"
+                  onClick={toggleAddAdvisor}
+                  disabled={isLoading || !selectedFirmId}
+                  title={!selectedFirmId ? 'Select a firm first' : undefined}
+                >
+                  {showAddAdvisor ? 'Cancel' : '+ New'}
+                </button>
+              </div>
               <select
                 id="advisor-select"
                 className={`upload-form__input upload-form__select${errors.advisor ? ' upload-form__input--error' : ''}`}
                 value={selectedAdvisorId}
-                onChange={(e) => { setSelectedAdvisorId(e.target.value); clearError('advisor') }}
+                onChange={(e) => { onSelectAdvisor?.(e.target.value); clearError('advisor') }}
                 disabled={isLoading || !selectedFirmId}
               >
                 <option value="">
@@ -125,6 +236,26 @@ export default function UploadForm({
                   <option key={a.id} value={a.id}>{a.name}</option>
                 ))}
               </select>
+              {showAddAdvisor && (
+                <div className="upload-form__add-row">
+                  <input
+                    className="upload-form__input"
+                    placeholder="New advisor name"
+                    value={newAdvisorName}
+                    onChange={(e) => { setNewAdvisorName(e.target.value); setAdvisorAddError(null) }}
+                    disabled={isCreatingAdvisor}
+                  />
+                  <button
+                    type="button"
+                    className="upload-form__add-btn"
+                    onClick={handleCreateAdvisor}
+                    disabled={isCreatingAdvisor}
+                  >
+                    {isCreatingAdvisor ? 'Adding…' : 'Add'}
+                  </button>
+                </div>
+              )}
+              {advisorAddError && <span className="upload-form__error">{advisorAddError}</span>}
               {errors.advisor && <span className="upload-form__error">{errors.advisor}</span>}
             </div>
           </>

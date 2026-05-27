@@ -33,6 +33,13 @@
   padding: var(--space-md) 0;
 }
 
+.template-manager__io {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-md);
+}
+
 .template-manager__controls {
   display: flex;
   align-items: center;

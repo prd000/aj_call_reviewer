@@ -81,6 +81,67 @@ async def create_advisor_only(name: str, firm_id: str) -> dict:
     return profile
 
 
+async def promote_advisor_to_user(user_id: str, email: str) -> dict:
+    """Convert an advisor-only profile into a full platform user in place.
+
+    Same auth `id` is preserved so historical reviews stay linked.
+    """
+    client = await get_client()
+
+    profile = await get_profile(user_id)
+    if profile is None:
+        raise ValueError("User not found.")
+    if profile.get("is_platform_user") is not False:
+        raise ValueError("User is already a platform user.")
+
+    existing = (
+        await client.table("profiles")
+        .select("id")
+        .eq("email", email)
+        .neq("id", user_id)
+        .execute()
+    )
+    if existing.data:
+        raise ValueError(f"A user with email {email} is already registered.")
+
+    await client.auth.admin.update_user_by_id(
+        user_id, {"email": email, "email_confirm": True}
+    )
+
+    app_url = os.environ.get("VITE_APP_URL", "").rstrip("/")
+    redirect_to = f"{app_url}/set-password" if app_url else None
+    try:
+        link_options = {"redirect_to": redirect_to} if redirect_to else {}
+        await client.auth.admin.generate_link({
+            "type": "recovery",
+            "email": email,
+            "options": link_options,
+        })
+    except Exception as exc:
+        logger.warning(
+            "admin.generate_link failed for %s; falling back to reset_password_for_email: %s",
+            user_id,
+            exc,
+        )
+        reset_options = {"redirect_to": redirect_to} if redirect_to else {}
+        await client.auth.reset_password_for_email(email, reset_options)
+
+    now = datetime.now(timezone.utc).isoformat()
+    result = await (
+        client.table("profiles")
+        .update({
+            "email": email,
+            "is_platform_user": True,
+            "updated_at": now,
+        })
+        .eq("id", user_id)
+        .execute()
+    )
+    if not result.data:
+        raise ValueError("Failed to update profile.")
+    return result.data[0]
+
+
 async def update_profile(user_id: str, data: dict) -> dict | None:
     client = await get_client()
     now = datetime.now(timezone.utc).isoformat()

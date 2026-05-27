@@ -13,11 +13,13 @@ router = APIRouter()
 
 def _review_summary(review: dict) -> dict:
     overall_score = None
+    overall_max_score = None
     categories = review.get("review", {}).get("categories", [])
     if categories:
-        scores = [c["score"] for c in categories if isinstance(c.get("score"), (int, float))]
-        if scores:
-            overall_score = round(sum(scores) / len(scores), 1)
+        scored = [c for c in categories if isinstance(c.get("score"), (int, float))]
+        if scored:
+            overall_score = sum(c["score"] for c in scored)
+            overall_max_score = sum(c.get("max_score", 10) for c in scored)
 
     return {
         "id": review["id"],
@@ -25,6 +27,7 @@ def _review_summary(review: dict) -> dict:
         "status": review.get("status", "pending"),
         "metadata": review.get("metadata", {}),
         "overall_score": overall_score,
+        "overall_max_score": overall_max_score,
     }
 
 

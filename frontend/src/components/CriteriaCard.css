@@ -50,7 +50,14 @@
   font-size: 12px;
   color: var(--color-muted);
   line-height: 1.5;
+  margin: 0 0 var(--space-xxs) 0;
+}
+
+.criteria-card__max-score-label {
+  font-size: 11px;
+  color: var(--color-muted);
   margin: 0;
+  font-style: italic;
 }
 
 .criteria-card__success-label {
@@ -106,6 +113,10 @@
 .criteria-card__input:focus {
   outline: none;
   border-color: var(--color-primary);
+}
+
+.criteria-card__input--max-score {
+  width: 80px;
 }
 
 .criteria-card__textarea {

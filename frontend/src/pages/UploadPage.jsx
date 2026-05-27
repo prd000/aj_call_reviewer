@@ -3,7 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import TemplateManager from '../components/TemplateManager'
 import UploadForm from '../components/UploadForm'
 import { useAuth } from '../context/AuthContext'
-import { getFirmAdvisors, listFirms, uploadCall } from '../services/api'
+import {
+  createFirm,
+  createUser,
+  getFirmAdvisors,
+  listFirms,
+  uploadCall,
+} from '../services/api'
 import './UploadPage.css'
 
 export default function UploadPage() {
@@ -17,6 +23,8 @@ export default function UploadPage() {
   const [activeTemplateId, setActiveTemplateId] = useState(null)
   const [firms, setFirms] = useState([])
   const [firmAdvisors, setFirmAdvisors] = useState([])
+  const [selectedFirmId, setSelectedFirmId] = useState('')
+  const [selectedAdvisorId, setSelectedAdvisorId] = useState('')
 
   useEffect(() => {
     if (isBds) {
@@ -33,6 +41,25 @@ export default function UploadPage() {
     } catch {
       setFirmAdvisors([])
     }
+  }
+
+  async function handleCreateFirm(name) {
+    const firm = await createFirm({ name })
+    setFirms((prev) => [...prev, firm])
+    setSelectedFirmId(firm.id)
+    setSelectedAdvisorId('')
+    await handleFirmChange(firm.id)
+  }
+
+  async function handleCreateAdvisor(name, firmId) {
+    const advisor = await createUser({
+      name,
+      role: 'financial_advisor',
+      firm_id: firmId,
+      send_invite: false,
+    })
+    setFirmAdvisors((prev) => [...prev, advisor])
+    setSelectedAdvisorId(advisor.id)
   }
 
   const handleCriteriaChange = useCallback(function (criteria, _name, templateId) {
@@ -90,6 +117,12 @@ export default function UploadPage() {
             firms={firms}
             firmAdvisors={firmAdvisors}
             onFirmChange={handleFirmChange}
+            selectedFirmId={selectedFirmId}
+            selectedAdvisorId={selectedAdvisorId}
+            onSelectFirm={setSelectedFirmId}
+            onSelectAdvisor={setSelectedAdvisorId}
+            onCreateFirm={handleCreateFirm}
+            onCreateAdvisor={handleCreateAdvisor}
           />
         </div>
 

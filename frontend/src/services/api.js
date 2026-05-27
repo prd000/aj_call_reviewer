@@ -240,6 +240,16 @@ export async function setUserActive(id, active) {
   return handleResponse(response)
 }
 
+export async function promoteAdvisor(userId, email) {
+  const headers = { ...(await authHeaders()), 'Content-Type': 'application/json' }
+  const response = await apiFetch(`${BASE_URL}/users/${userId}/promote`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ email }),
+  })
+  return handleResponse(response)
+}
+
 export async function deleteUser(id) {
   const headers = await authHeaders()
   const response = await apiFetch(`${BASE_URL}/users/${id}`, {

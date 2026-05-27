@@ -12,6 +12,7 @@ from modules.user_profiles import (
     delete_user,
     get_profile,
     list_bds_reps,
+    promote_advisor_to_user,
     set_active,
     update_profile,
 )
@@ -41,6 +42,10 @@ class UpdateUserBody(BaseModel):
 
 class ActiveBody(BaseModel):
     active: bool
+
+
+class PromoteUserBody(BaseModel):
+    email: str
 
 
 # ── Firms ─────────────────────────────────────────────────────────────────────
@@ -144,6 +149,19 @@ async def toggle_user_active(
         return {"user_id": user_id, "active": body.active}
     except Exception as exc:
         logger.error("Failed to set active=%s for user %s: %s", body.active, user_id, exc)
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/users/{user_id}/promote")
+async def promote_user(
+    user_id: str, body: PromoteUserBody, user: dict = Depends(require_bds_rep)
+):
+    try:
+        return await promote_advisor_to_user(user_id, body.email.strip())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.error("Failed to promote user %s: %s", user_id, exc)
         raise HTTPException(status_code=400, detail=str(exc))
 
 

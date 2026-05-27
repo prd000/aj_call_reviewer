@@ -7,16 +7,21 @@ import {
   getFirmDetail,
   listBdsReps,
   listTemplates,
+  promoteAdvisor,
   setUserActive,
   updateFirm,
 } from '../services/api'
 import { useLoadingWatchdog } from '../hooks/useLoadingWatchdog'
 import './FirmDetailPage.css'
 
-function UserRow({ user, onToggleActive, onDelete }) {
+function UserRow({ user, onToggleActive, onDelete, onPromote }) {
   const [showConfirm, setShowConfirm] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [rowError, setRowError] = useState(null)
+
+  const [showInvite, setShowInvite] = useState(false)
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [isInviting, setIsInviting] = useState(false)
 
   async function handleDelete() {
     setIsDeleting(true)
@@ -37,6 +42,25 @@ function UserRow({ user, onToggleActive, onDelete }) {
       await onToggleActive()
     } catch (err) {
       setRowError(err?.message || 'Failed to update user.')
+    }
+  }
+
+  async function handleInvite() {
+    const email = inviteEmail.trim()
+    if (!email) {
+      setRowError('Email is required.')
+      return
+    }
+    setIsInviting(true)
+    setRowError(null)
+    try {
+      await onPromote(email)
+      setShowInvite(false)
+      setInviteEmail('')
+    } catch (err) {
+      setRowError(err?.message || 'Failed to send invite.')
+    } finally {
+      setIsInviting(false)
     }
   }
 
@@ -63,6 +87,41 @@ function UserRow({ user, onToggleActive, onDelete }) {
           <button className="mgmt-btn mgmt-btn--ghost" onClick={handleToggle}>
             {user.is_active ? 'Deactivate' : 'Reactivate'}
           </button>
+        )}
+        {isAdvisorOnly && (
+          showInvite ? (
+            <>
+              <input
+                className="upload-form__input user-row__invite-input"
+                type="email"
+                placeholder="Email address"
+                value={inviteEmail}
+                onChange={(e) => { setInviteEmail(e.target.value); setRowError(null) }}
+                disabled={isInviting}
+              />
+              <button
+                className="mgmt-btn mgmt-btn--primary"
+                onClick={handleInvite}
+                disabled={isInviting}
+              >
+                {isInviting ? 'Sending…' : 'Send invite'}
+              </button>
+              <button
+                className="mgmt-btn mgmt-btn--ghost"
+                onClick={() => { setShowInvite(false); setInviteEmail(''); setRowError(null) }}
+                disabled={isInviting}
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button
+              className="mgmt-btn mgmt-btn--ghost"
+              onClick={() => { setShowInvite(true); setRowError(null) }}
+            >
+              Invite as user
+            </button>
+          )
         )}
         {showConfirm ? (
           <>
@@ -197,6 +256,11 @@ export default function FirmDetailPage() {
   async function handleDeleteUser(userId) {
     await deleteUser(userId)
     setUsers((prev) => prev.filter((u) => u.id !== userId))
+  }
+
+  async function handlePromoteUser(userId, email) {
+    const updated = await promoteAdvisor(userId, email)
+    setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, ...updated } : u)))
   }
 
   async function handleDeleteFirm() {
@@ -350,6 +414,7 @@ export default function FirmDetailPage() {
                   user={u}
                   onToggleActive={() => handleToggleActive(u.id, u.is_active)}
                   onDelete={() => handleDeleteUser(u.id)}
+                  onPromote={(email) => handlePromoteUser(u.id, email)}
                 />
               ))}
             </div>
