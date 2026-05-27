@@ -79,6 +79,11 @@
   gap: var(--space-xs);
 }
 
+/* Give searchable-select filters a fixed width so they don't collapse */
+.history-page__filter--select {
+  min-width: 180px;
+}
+
 .history-page__filter-label {
   font-size: 13px;
   font-weight: 600;

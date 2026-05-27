@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import SearchableSelect from './SearchableSelect'
 import './UploadForm.css'
 
 const ACCEPTED_EXTENSIONS = ['.mp3', '.mp4', '.m4a', '.wav']
@@ -59,14 +60,6 @@ export default function UploadForm({
     }
     setFile(selected)
     clearError('file')
-  }
-
-  function handleFirmChange(e) {
-    const firmId = e.target.value
-    onSelectFirm?.(firmId)
-    onSelectAdvisor?.('')
-    clearError('firm')
-    if (firmId) onFirmChange?.(firmId)
   }
 
   function toggleAddFirm() {
@@ -170,18 +163,20 @@ export default function UploadForm({
                   {showAddFirm ? 'Cancel' : '+ New'}
                 </button>
               </div>
-              <select
+              <SearchableSelect
                 id="firm-select"
-                className={`upload-form__input upload-form__select${errors.firm ? ' upload-form__input--error' : ''}`}
+                options={firms.map((f) => ({ value: f.id, label: f.name }))}
                 value={selectedFirmId}
-                onChange={handleFirmChange}
+                onChange={(firmId) => {
+                  onSelectFirm?.(firmId)
+                  onSelectAdvisor?.('')
+                  clearError('firm')
+                  if (firmId) onFirmChange?.(firmId)
+                }}
+                placeholder="Select a firm…"
                 disabled={isLoading}
-              >
-                <option value="">Select a firm…</option>
-                {firms.map((f) => (
-                  <option key={f.id} value={f.id}>{f.name}</option>
-                ))}
-              </select>
+                hasError={!!errors.firm}
+              />
               {showAddFirm && (
                 <div className="upload-form__add-row">
                   <input
@@ -218,24 +213,24 @@ export default function UploadForm({
                   {showAddAdvisor ? 'Cancel' : '+ New'}
                 </button>
               </div>
-              <select
+              <SearchableSelect
                 id="advisor-select"
-                className={`upload-form__input upload-form__select${errors.advisor ? ' upload-form__input--error' : ''}`}
+                options={firmAdvisors.map((a) => ({ value: a.id, label: a.name }))}
                 value={selectedAdvisorId}
-                onChange={(e) => { onSelectAdvisor?.(e.target.value); clearError('advisor') }}
-                disabled={isLoading || !selectedFirmId}
-              >
-                <option value="">
-                  {!selectedFirmId
+                onChange={(advisorId) => {
+                  onSelectAdvisor?.(advisorId)
+                  clearError('advisor')
+                }}
+                placeholder={
+                  !selectedFirmId
                     ? 'Select a firm first'
                     : firmAdvisors.length === 0
                     ? 'No advisors at this firm'
-                    : 'Select an advisor…'}
-                </option>
-                {firmAdvisors.map((a) => (
-                  <option key={a.id} value={a.id}>{a.name}</option>
-                ))}
-              </select>
+                    : 'Select an advisor…'
+                }
+                disabled={isLoading || !selectedFirmId}
+                hasError={!!errors.advisor}
+              />
               {showAddAdvisor && (
                 <div className="upload-form__add-row">
                   <input

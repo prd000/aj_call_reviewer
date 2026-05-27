@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ReviewList from '../components/ReviewList'
+import SearchableSelect from '../components/SearchableSelect'
 import { useAuth } from '../context/AuthContext'
 import { useLoadingWatchdog } from '../hooks/useLoadingWatchdog'
 import { deleteReview, listFirms, listReviews } from '../services/api'
@@ -132,40 +133,40 @@ export default function HistoryPage() {
             </div>
 
             {advisorOptions.length > 0 && (
-              <div className="history-page__filter">
+              <div className="history-page__filter history-page__filter--select">
                 <label htmlFor="advisor-filter" className="history-page__filter-label">
                   Advisor
                 </label>
-                <select
+                <SearchableSelect
                   id="advisor-filter"
-                  className="history-page__filter-select"
+                  size="sm"
+                  options={[
+                    { value: '', label: 'All' },
+                    ...advisorOptions.map((a) => ({ value: a, label: a })),
+                  ]}
                   value={filterAdvisor}
-                  onChange={(e) => setFilterAdvisor(e.target.value)}
-                >
-                  <option value="">All</option>
-                  {advisorOptions.map((a) => (
-                    <option key={a} value={a}>{a}</option>
-                  ))}
-                </select>
+                  onChange={setFilterAdvisor}
+                  placeholder="All"
+                />
               </div>
             )}
 
             {isBds && firmOptions.length > 0 && (
-              <div className="history-page__filter">
+              <div className="history-page__filter history-page__filter--select">
                 <label htmlFor="firm-filter" className="history-page__filter-label">
                   Firm
                 </label>
-                <select
+                <SearchableSelect
                   id="firm-filter"
-                  className="history-page__filter-select"
+                  size="sm"
+                  options={[
+                    { value: '', label: 'All' },
+                    ...firmOptions.map((f) => ({ value: f, label: f })),
+                  ]}
                   value={filterFirm}
-                  onChange={(e) => setFilterFirm(e.target.value)}
-                >
-                  <option value="">All</option>
-                  {firmOptions.map((f) => (
-                    <option key={f} value={f}>{f}</option>
-                  ))}
-                </select>
+                  onChange={setFilterFirm}
+                  placeholder="All"
+                />
               </div>
             )}
           </div>
