@@ -49,8 +49,8 @@ function validateImportedTemplate(parsed) {
       return { ok: false, error: `criteria[${i}].title must be a string if present.` }
     }
     if (c.max_score !== undefined) {
-      if (!Number.isInteger(c.max_score) || c.max_score < 1 || c.max_score > 10) {
-        return { ok: false, error: `criteria[${i}].max_score must be an integer between 1 and 10 if present.` }
+      if (!Number.isInteger(c.max_score) || c.max_score < 1) {
+        return { ok: false, error: `criteria[${i}].max_score must be a positive integer if present.` }
       }
     }
     criteria.push({
