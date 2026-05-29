@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import ReviewResults from '../components/ReviewResults'
 import { useLoadingWatchdog } from '../hooks/useLoadingWatchdog'
-import { getReview } from '../services/api'
+import { getReview, updateReviewOutcome } from '../services/api'
 import './ResultsPage.css'
 
 export default function ResultsPage() {
@@ -10,7 +10,30 @@ export default function ResultsPage() {
   const [review, setReview] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [isSavingOutcome, setIsSavingOutcome] = useState(false)
+  const [outcomeError, setOutcomeError] = useState(null)
   useLoadingWatchdog(isLoading, setIsLoading, { label: 'results' })
+
+  async function handleOutcomeChange(newOutcome) {
+    const snapshot = review
+    const nextOutcome = newOutcome || null
+    setOutcomeError(null)
+    setIsSavingOutcome(true)
+    // Optimistic update so the dropdown reflects the choice immediately.
+    setReview((prev) => ({
+      ...prev,
+      metadata: { ...prev.metadata, call_outcome: nextOutcome },
+    }))
+    try {
+      const updated = await updateReviewOutcome(id, nextOutcome)
+      setReview(updated)
+    } catch (err) {
+      setReview(snapshot)
+      setOutcomeError(err.message || 'Failed to update outcome.')
+    } finally {
+      setIsSavingOutcome(false)
+    }
+  }
 
   useEffect(() => {
     let isMounted = true
@@ -72,7 +95,12 @@ export default function ResultsPage() {
             <div className="results-page__header">
               <h1 className="results-page__title">Call Review</h1>
             </div>
-            <ReviewResults review={review} />
+            <ReviewResults
+              review={review}
+              onOutcomeChange={handleOutcomeChange}
+              isSavingOutcome={isSavingOutcome}
+              outcomeError={outcomeError}
+            />
           </>
         )}
       </div>

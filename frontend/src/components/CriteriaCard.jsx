@@ -13,7 +13,7 @@ export default function CriteriaCard({ criterion, onUpdate, onDelete, onSave, on
     const trimmedTitle = title.trim()
     const trimmedDesc = description.trim()
     const trimmedCond = successCondition.trim()
-    const parsedMax = Math.min(10, Math.max(1, parseInt(maxScore, 10) || 10))
+    const parsedMax = Math.max(1, parseInt(maxScore, 10) || 10)
     if (isAddMode) {
       onSave({
         id: crypto.randomUUID(),
@@ -80,7 +80,6 @@ export default function CriteriaCard({ criterion, onUpdate, onDelete, onSave, on
             className="criteria-card__input criteria-card__input--max-score"
             type="number"
             min={1}
-            max={10}
             value={maxScore}
             onChange={e => setMaxScore(e.target.value)}
           />

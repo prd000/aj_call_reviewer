@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
 
 from modules.auth import get_current_user
 from modules.firms import get_firm
-from modules.ingestion import create_record, validate_file
+from modules.ingestion import CALL_OUTCOMES, create_record, validate_file
 from modules.storage import (
     delete_recording_from_storage,
     save_review,
@@ -26,6 +26,7 @@ async def upload_call(
     firm_id: str = Form(None),
     advisor_user_id: str = Form(None),
     template_id: str = Form(None),
+    call_outcome: str = Form(None),
     user: dict = Depends(get_current_user),
 ):
     if not validate_file(file.filename or ""):
@@ -36,6 +37,10 @@ async def upload_call(
                 "Accepted formats are .mp3, .mp4, .m4a, and .wav."
             ),
         )
+
+    # Form fields can't use a Pydantic Literal directly, so validate manually.
+    if call_outcome is not None and call_outcome not in CALL_OUTCOMES:
+        raise HTTPException(status_code=400, detail="Invalid call outcome.")
 
     if user["role"] == "financial_advisor":
         fa_firm_id = user["firm_id"]
@@ -82,6 +87,7 @@ async def upload_call(
         firm=effective_firm_name,
         prospect_name=prospect_name.strip(),
         original_filename=file.filename or "recording",
+        call_outcome=call_outcome,
     )
     record["firm_id"] = effective_firm_id
     record["uploaded_by"] = user["user_id"]

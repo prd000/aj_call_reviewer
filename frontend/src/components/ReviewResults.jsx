@@ -1,7 +1,11 @@
 import ScoreCard from './ScoreCard'
 import TranscriptPanel from './TranscriptPanel'
 import FrameworkPanel from './FrameworkPanel'
+import SearchableSelect from './SearchableSelect'
+import { OUTCOME_OPTIONS } from '../lib/outcomes'
 import './ReviewResults.css'
+
+const OUTCOME_SELECT_OPTIONS = [{ value: '', label: 'Not set' }, ...OUTCOME_OPTIONS]
 
 function formatDate(isoString) {
   if (!isoString) return '—'
@@ -32,7 +36,7 @@ function getOverallScoreClass(ratio) {
   return 'review-results__avg-score--low'
 }
 
-export default function ReviewResults({ review }) {
+export default function ReviewResults({ review, onOutcomeChange, isSavingOutcome, outcomeError }) {
   const { metadata, review: reviewData, transcript, speaker_map, framework, created_at } = review
   const categories = reviewData?.categories || []
   const frameworkCriteria = framework?.criteria || []
@@ -59,6 +63,21 @@ export default function ReviewResults({ review }) {
           <div className="review-results__meta-item">
             <span className="review-results__meta-label">Date</span>
             <span className="review-results__meta-value">{formatDate(created_at)}</span>
+          </div>
+          <div className="review-results__meta-item">
+            <span className="review-results__meta-label">Outcome</span>
+            <SearchableSelect
+              id="review-outcome"
+              size="md"
+              options={OUTCOME_SELECT_OPTIONS}
+              value={metadata?.call_outcome || ''}
+              onChange={onOutcomeChange}
+              placeholder="Not set"
+              disabled={isSavingOutcome}
+            />
+            {outcomeError && (
+              <span className="review-results__meta-error">{outcomeError}</span>
+            )}
           </div>
         </div>
 

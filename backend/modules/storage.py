@@ -20,6 +20,7 @@ def _to_row(review: dict) -> dict:
         "firm": metadata.get("firm"),
         "prospect_name": metadata.get("prospect_name"),
         "original_filename": metadata.get("original_filename"),
+        "call_outcome": metadata.get("call_outcome"),
         "speaker_map": review.get("speaker_map"),
         "transcript": review.get("transcript"),
         "review_results": review.get("review"),
@@ -44,6 +45,7 @@ def _from_row(row: dict) -> dict:
             "prospect_name": row.get("prospect_name"),
             "bds_rep": row.get("bds_rep"),  # retained for pre-auth legacy records
             "original_filename": row.get("original_filename"),
+            "call_outcome": row.get("call_outcome"),
         },
         "speaker_map": row.get("speaker_map"),
         "transcript": row.get("transcript"),
@@ -115,6 +117,17 @@ async def update_review_status(
         patch["error_message"] = error_message
     if celery_task_id is not None:
         patch["celery_task_id"] = celery_task_id
+    await client.table("reviews").update(patch).eq("id", review_id).execute()
+
+
+async def update_review_outcome(review_id: str, call_outcome: str | None) -> None:
+    """Partial update of a review's call outcome.
+
+    Always writes the key (unlike update_review_status's conditional adds) so that
+    passing None clears the column back to NULL ("no outcome set").
+    """
+    client = await get_client()
+    patch = {"call_outcome": call_outcome}
     await client.table("reviews").update(patch).eq("id", review_id).execute()
 
 

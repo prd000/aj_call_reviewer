@@ -103,6 +103,17 @@ export async function deleteReview(id) {
   return handleResponse(response)
 }
 
+// Pass `null` to clear the outcome. Returns the full updated review.
+export async function updateReviewOutcome(id, callOutcome) {
+  const headers = { ...(await authHeaders()), 'Content-Type': 'application/json' }
+  const response = await apiFetch(`${BASE_URL}/reviews/${id}/outcome`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ call_outcome: callOutcome }),
+  })
+  return handleResponse(response)
+}
+
 // ── Templates ─────────────────────────────────────────────────────────────────
 
 export async function listTemplates() {

@@ -1,6 +1,9 @@
 import { useRef, useState } from 'react'
 import SearchableSelect from './SearchableSelect'
+import { OUTCOME_OPTIONS } from '../lib/outcomes'
 import './UploadForm.css'
+
+const OUTCOME_SELECT_OPTIONS = [{ value: '', label: 'Not set' }, ...OUTCOME_OPTIONS]
 
 const ACCEPTED_EXTENSIONS = ['.mp3', '.mp4', '.m4a', '.wav']
 const ACCEPTED_MIME_TYPES = 'audio/mpeg,audio/mp4,audio/m4a,audio/wav,audio/x-wav,video/mp4'
@@ -29,6 +32,7 @@ export default function UploadForm({
 }) {
   const isBds = userRole === 'bds_rep'
   const [prospectName, setProspectName] = useState('')
+  const [callOutcome, setCallOutcome] = useState('')
   const [file, setFile] = useState(null)
   const [errors, setErrors] = useState({})
   const [isDragOver, setIsDragOver] = useState(false)
@@ -143,6 +147,7 @@ export default function UploadForm({
       formData.append('firm_id', selectedFirmId)
       formData.append('advisor_user_id', selectedAdvisorId)
     }
+    if (callOutcome) formData.append('call_outcome', callOutcome)
     onSubmit(formData)
   }
 
@@ -294,6 +299,19 @@ export default function UploadForm({
           {errors.prospectName && (
             <span className="upload-form__error">{errors.prospectName}</span>
           )}
+        </div>
+
+        <div className="upload-form__field">
+          <label htmlFor="call-outcome" className="upload-form__label">Call Outcome (optional)</label>
+          <SearchableSelect
+            id="call-outcome"
+            size="md"
+            options={OUTCOME_SELECT_OPTIONS}
+            value={callOutcome}
+            onChange={setCallOutcome}
+            placeholder="Not set"
+            disabled={isLoading}
+          />
         </div>
       </div>
 

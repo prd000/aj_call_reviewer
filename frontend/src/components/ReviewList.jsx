@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { NO_OUTCOME, outcomeColorClass } from '../lib/outcomes'
 import './ReviewList.css'
 
 const IN_PROGRESS_STATUSES = ['pending', 'transcribing', 'reviewing']
@@ -34,6 +35,16 @@ function ScoreBadge({ score, maxScore }) {
   else cls += ' review-list-item__badge--low'
 
   return <span className={cls}>{score}/{effectiveMax}</span>
+}
+
+function OutcomePill({ outcome }) {
+  if (!outcome) return null
+  const color = outcomeColorClass(outcome)
+  return (
+    <span className={`review-list-item__outcome review-list-item__outcome--${color}`}>
+      {outcome}
+    </span>
+  )
 }
 
 function TrashIcon() {
@@ -102,6 +113,7 @@ function ReviewListItem({ review, onClick, onDelete }) {
         <div className="review-list-item__secondary">
           <span className="review-list-item__prospect">Prospect: {metadata?.prospect_name || '—'}</span>
           <span className="review-list-item__date">{formatDate(created_at)}</span>
+          <OutcomePill outcome={metadata?.call_outcome} />
         </div>
       </div>
 
@@ -156,18 +168,24 @@ function ReviewListItem({ review, onClick, onDelete }) {
   )
 }
 
-export default function ReviewList({ reviews, filterFirm, filterAdvisor, searchQuery, onDelete }) {
+export default function ReviewList({ reviews, filterFirm, filterAdvisor, filterOutcome, searchQuery, onDelete }) {
   const navigate = useNavigate()
 
   const filtered = reviews.filter((r) => {
     if (filterFirm && r.metadata?.firm !== filterFirm) return false
     if (filterAdvisor && r.metadata?.advisor_name !== filterAdvisor) return false
+    if (filterOutcome === NO_OUTCOME) {
+      if (r.metadata?.call_outcome) return false
+    } else if (filterOutcome && r.metadata?.call_outcome !== filterOutcome) {
+      return false
+    }
     if (searchQuery) {
       const q = searchQuery.toLowerCase()
       const searchable = [
         r.metadata?.advisor_name,
         r.metadata?.firm,
         r.metadata?.prospect_name,
+        r.metadata?.call_outcome,
       ].filter(Boolean).join(' ').toLowerCase()
       if (!searchable.includes(q)) return false
     }
