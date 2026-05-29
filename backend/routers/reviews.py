@@ -2,9 +2,17 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
+from pydantic import BaseModel
 
 from modules.auth import get_current_user
-from modules.storage import delete_recording_from_storage, delete_review, get_review, list_reviews
+from modules.ingestion import CallOutcome
+from modules.storage import (
+    delete_recording_from_storage,
+    delete_review,
+    get_review,
+    list_reviews,
+    update_review_outcome,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +39,11 @@ def _review_summary(review: dict) -> dict:
         "overall_score": overall_score,
         "overall_max_score": overall_max_score,
     }
+
+
+class OutcomeBody(BaseModel):
+    # None clears the outcome; any non-canonical string is rejected with 422.
+    call_outcome: CallOutcome | None = None
 
 
 def _fa_can_access(review: dict, user: dict) -> bool:
@@ -61,6 +74,22 @@ async def get_review_by_id(review_id: str, user: dict = Depends(get_current_user
     if user["role"] == "financial_advisor" and not _fa_can_access(review, user):
         raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
     return review
+
+
+@router.patch("/reviews/{review_id}/outcome")
+async def update_review_outcome_by_id(
+    review_id: str,
+    body: OutcomeBody,
+    user: dict = Depends(get_current_user),
+):
+    review = await get_review(review_id)
+    if review is None:
+        raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
+    if user["role"] == "financial_advisor" and not _fa_can_access(review, user):
+        raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
+    # Outcome is metadata, editable regardless of review status.
+    await update_review_outcome(review_id, body.call_outcome)
+    return await get_review(review_id)
 
 
 @router.delete("/reviews/{review_id}", status_code=204)

@@ -4,6 +4,7 @@ import SearchableSelect from '../components/SearchableSelect'
 import { useAuth } from '../context/AuthContext'
 import { useLoadingWatchdog } from '../hooks/useLoadingWatchdog'
 import { deleteReview, listFirms, listReviews } from '../services/api'
+import { OUTCOME_FILTER_OPTIONS } from '../lib/outcomes'
 import './HistoryPage.css'
 
 const IN_PROGRESS_STATUSES = ['pending', 'transcribing', 'reviewing']
@@ -18,6 +19,7 @@ export default function HistoryPage() {
   const [filterFirm, setFilterFirm] = useState('')
   useLoadingWatchdog(isLoading, setIsLoading, { label: 'history' })
   const [filterAdvisor, setFilterAdvisor] = useState('')
+  const [filterOutcome, setFilterOutcome] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [firms, setFirms] = useState([])
   const pollingRef = useRef(null)
@@ -169,6 +171,20 @@ export default function HistoryPage() {
                 />
               </div>
             )}
+
+            <div className="history-page__filter history-page__filter--select">
+              <label htmlFor="outcome-filter" className="history-page__filter-label">
+                Outcome
+              </label>
+              <SearchableSelect
+                id="outcome-filter"
+                size="sm"
+                options={OUTCOME_FILTER_OPTIONS}
+                value={filterOutcome}
+                onChange={setFilterOutcome}
+                placeholder="All"
+              />
+            </div>
           </div>
         )}
 
@@ -177,6 +193,7 @@ export default function HistoryPage() {
             reviews={reviews}
             filterFirm={filterFirm}
             filterAdvisor={filterAdvisor}
+            filterOutcome={filterOutcome}
             searchQuery={searchQuery}
             onDelete={handleDelete}
           />

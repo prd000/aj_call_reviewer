@@ -83,6 +83,35 @@
   color: var(--color-muted);
 }
 
+/* Outcome pill — text color only (per DESIGN.md), tinted background for legibility */
+.review-list-item__outcome {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--rounded-pill);
+  white-space: nowrap;
+}
+
+.review-list-item__outcome--green {
+  color: var(--color-success);
+  background-color: rgba(14, 203, 129, 0.12);
+}
+
+.review-list-item__outcome--red {
+  color: var(--color-danger);
+  background-color: rgba(246, 70, 93, 0.12);
+}
+
+.review-list-item__outcome--blue {
+  color: var(--color-info);
+  background-color: rgba(59, 130, 246, 0.12);
+}
+
+.review-list-item__outcome--yellow {
+  color: var(--color-primary);
+  background-color: rgba(252, 213, 53, 0.12);
+}
+
 .review-list-item__right {
   display: flex;
   align-items: center;
