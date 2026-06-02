@@ -36,7 +36,7 @@ function getOverallScoreClass(ratio) {
   return 'review-results__avg-score--low'
 }
 
-export default function ReviewResults({ review, onOutcomeChange, isSavingOutcome, outcomeError }) {
+export default function ReviewResults({ review, onOutcomeChange, isSavingOutcome, outcomeError, transcriptRef }) {
   const { metadata, review: reviewData, transcript, speaker_map, framework, created_at } = review
   const categories = reviewData?.categories || []
   const frameworkCriteria = framework?.criteria || []
@@ -131,7 +131,7 @@ export default function ReviewResults({ review, onOutcomeChange, isSavingOutcome
       {transcript && transcript.length > 0 && (
         <section className="review-results__transcript">
           <h2 className="review-results__section-heading">Transcript</h2>
-          <TranscriptPanel transcript={transcript} speakerMap={speaker_map} />
+          <TranscriptPanel ref={transcriptRef} transcript={transcript} speakerMap={speaker_map} />
         </section>
       )}
     </div>

@@ -23,6 +23,9 @@
 }
 
 .results-page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: var(--space-xl);
 }
 
@@ -31,6 +34,30 @@
   font-weight: 700;
   color: var(--color-on-dark);
   line-height: 1.2;
+}
+
+.results-page__chat-btn {
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+  border: none;
+  border-radius: var(--rounded-md);
+  font-family: var(--font-family);
+  font-size: 13px;
+  font-weight: 600;
+  padding: var(--space-xs) var(--space-md);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background-color var(--transition-fast);
+}
+
+.results-page__chat-btn:hover:not(:disabled) {
+  background-color: var(--color-primary-active);
+}
+
+.results-page__chat-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 /* Loading state */

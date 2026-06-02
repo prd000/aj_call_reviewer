@@ -104,6 +104,11 @@
   min-width: 0;
 }
 
+.transcript-panel__segment--highlight {
+  background-color: var(--color-primary-disabled);
+  transition: background-color var(--transition-base);
+}
+
 .transcript-panel__speaker {
   display: inline-block;
   font-size: 11px;

@@ -1,4 +1,5 @@
 import logging
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
@@ -6,6 +7,7 @@ from pydantic import BaseModel
 
 from modules.auth import get_current_user
 from modules.ingestion import CallOutcome
+from modules.reviewer import LLMUnavailableError, chat_about_transcript
 from modules.storage import (
     delete_recording_from_storage,
     delete_review,
@@ -44,6 +46,19 @@ def _review_summary(review: dict) -> dict:
 class OutcomeBody(BaseModel):
     # None clears the outcome; any non-canonical string is rejected with 422.
     call_outcome: CallOutcome | None = None
+
+
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class ChatBody(BaseModel):
+    messages: list[ChatMessage]
+
+
+class ChatResponse(BaseModel):
+    answer: str
 
 
 def _fa_can_access(review: dict, user: dict) -> bool:
@@ -90,6 +105,44 @@ async def update_review_outcome_by_id(
     # Outcome is metadata, editable regardless of review status.
     await update_review_outcome(review_id, body.call_outcome)
     return await get_review(review_id)
+
+
+@router.post("/reviews/{review_id}/chat", response_model=ChatResponse)
+async def chat_about_review(
+    review_id: str,
+    body: ChatBody,
+    user: dict = Depends(get_current_user),
+):
+    review = await get_review(review_id)
+    if review is None:
+        raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
+    if user["role"] == "financial_advisor" and not _fa_can_access(review, user):
+        raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
+
+    transcript = review.get("transcript") or []
+    if not transcript:
+        raise HTTPException(status_code=400, detail="This review has no transcript to chat about.")
+    if not body.messages or body.messages[-1].role != "user":
+        raise HTTPException(status_code=400, detail="Last message must be from the user.")
+
+    try:
+        answer = chat_about_transcript(
+            transcript,
+            review.get("speaker_map", {}),
+            [m.model_dump() for m in body.messages],
+        )
+        return ChatResponse(answer=answer)
+    except LLMUnavailableError:
+        raise HTTPException(
+            status_code=503,
+            detail="Chat is unavailable: no AI provider is configured.",
+        )
+    except Exception as exc:
+        logger.error("chat_about_review failed: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=502,
+            detail="Couldn't get an answer. Please try again later.",
+        )
 
 
 @router.delete("/reviews/{review_id}", status_code=204)

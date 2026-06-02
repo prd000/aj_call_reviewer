@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import ReviewResults from '../components/ReviewResults'
+import ChatPanel from '../components/ChatPanel'
 import { useLoadingWatchdog } from '../hooks/useLoadingWatchdog'
 import { getReview, updateReviewOutcome } from '../services/api'
 import './ResultsPage.css'
@@ -12,6 +13,9 @@ export default function ResultsPage() {
   const [error, setError] = useState(null)
   const [isSavingOutcome, setIsSavingOutcome] = useState(false)
   const [outcomeError, setOutcomeError] = useState(null)
+  const [isChatOpen, setIsChatOpen] = useState(false)
+  const [chatMessages, setChatMessages] = useState([])
+  const transcriptRef = useRef(null)
   useLoadingWatchdog(isLoading, setIsLoading, { label: 'results' })
 
   async function handleOutcomeChange(newOutcome) {
@@ -41,6 +45,9 @@ export default function ResultsPage() {
     async function fetchReview() {
       setIsLoading(true)
       setError(null)
+      // Reset chat when navigating to a different review.
+      setChatMessages([])
+      setIsChatOpen(false)
       try {
         const data = await getReview(id)
         if (isMounted) {
@@ -63,6 +70,8 @@ export default function ResultsPage() {
       isMounted = false
     }
   }, [id])
+
+  const hasTranscript = Boolean(review?.transcript?.length)
 
   return (
     <div className="results-page">
@@ -94,16 +103,36 @@ export default function ResultsPage() {
           <>
             <div className="results-page__header">
               <h1 className="results-page__title">Call Review</h1>
+              <button
+                className="results-page__chat-btn"
+                onClick={() => setIsChatOpen(true)}
+                disabled={!hasTranscript}
+                title={hasTranscript ? 'Chat about this call' : 'No transcript available'}
+              >
+                Ask AI
+              </button>
             </div>
             <ReviewResults
               review={review}
               onOutcomeChange={handleOutcomeChange}
               isSavingOutcome={isSavingOutcome}
               outcomeError={outcomeError}
+              transcriptRef={transcriptRef}
             />
           </>
         )}
       </div>
+
+      {review && (
+        <ChatPanel
+          reviewId={id}
+          messages={chatMessages}
+          setMessages={setChatMessages}
+          isOpen={isChatOpen}
+          onClose={() => setIsChatOpen(false)}
+          onTimestampClick={(ts) => transcriptRef.current?.jumpTo(ts)}
+        />
+      )}
     </div>
   )
 }

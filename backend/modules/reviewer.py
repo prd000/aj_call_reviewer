@@ -1,7 +1,7 @@
 import os
 import json as _json
 import logging
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from modules.llm_config import get_llm, get_llm_api_key
 
 logger = logging.getLogger(__name__)
@@ -83,6 +83,73 @@ STUB_REVIEW = {
         },
     ],
 }
+
+
+class LLMUnavailableError(RuntimeError):
+    pass
+
+
+CHAT_SYSTEM_PROMPT_TEMPLATE = (
+    "You are a call review assistant. You have been given a complete transcript of a "
+    "financial advisor's sales call.\n\n"
+    "Your sole job is to answer questions about THIS transcript. You must:\n"
+    "- Use ONLY information from this transcript. Do not use outside knowledge.\n"
+    "- If a question cannot be answered from the transcript, reply exactly: "
+    '"I can only answer questions about this call\'s transcript."\n'
+    "- Cite EVERY relevant moment with its timestamp and a short verbatim quote, "
+    'e.g. 00:01:23 — "the advisor said..."\n'
+    "- Timestamps must exactly match a bracketed line in the transcript below.\n"
+    "- You may offer light interpretation ONLY when it is directly anchored to a "
+    "cited, timestamped quote.\n"
+    "- Refer to speakers by their role label (Advisor, Prospect, etc.) as shown in "
+    "the transcript.\n\n"
+    "Transcript:\n{transcript}"
+)
+
+MAX_CHAT_HISTORY = 8
+
+
+def _format_transcript_labeled(transcript: list[dict], speaker_map: dict) -> str:
+    lines = []
+    for segment in transcript:
+        timestamp = segment.get("timestamp", "")
+        text = segment.get("text", "")
+        spk = segment.get("speaker")
+        if spk is not None:
+            label = speaker_map.get(str(spk), f"Speaker {spk + 1}")
+        else:
+            label = "Speaker"
+        lines.append(f"[{timestamp}] {label}: {text}")
+    return "\n".join(lines)
+
+
+def chat_about_transcript(transcript: list[dict], speaker_map: dict, messages: list[dict]) -> str:
+    """
+    Respond to a user question grounded strictly in the given transcript.
+
+    messages: [{"role": "user"|"assistant", "content": str}, ...], last entry is the new user turn.
+    Raises LLMUnavailableError if no API key is configured.
+    """
+    if not get_llm_api_key():
+        raise LLMUnavailableError("No LLM API key is configured.")
+
+    transcript_text = _format_transcript_labeled(transcript, speaker_map)
+    system_prompt = CHAT_SYSTEM_PROMPT_TEMPLATE.format(transcript=transcript_text)
+
+    if len(transcript) > 2000:
+        logger.warning(
+            "chat_about_transcript: transcript has %d segments — may approach token limit",
+            len(transcript),
+        )
+
+    role_map = {"user": HumanMessage, "assistant": AIMessage}
+    history = messages[-MAX_CHAT_HISTORY:]
+    lc_messages = [SystemMessage(content=system_prompt)] + [
+        role_map[m["role"]](content=m["content"]) for m in history
+    ]
+
+    llm = get_llm(temperature=0.0)
+    return llm.invoke(lc_messages).content.strip()
 
 
 def identify_speakers(transcript: list[dict]) -> dict:
