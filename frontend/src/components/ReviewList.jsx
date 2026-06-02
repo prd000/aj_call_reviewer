@@ -168,12 +168,23 @@ function ReviewListItem({ review, onClick, onDelete }) {
   )
 }
 
-export default function ReviewList({ reviews, filterFirm, filterAdvisor, filterOutcome, searchQuery, onDelete }) {
+export default function ReviewList({
+  reviews,
+  filterFirm,
+  filterAdvisor,
+  filterTemplate,
+  filterBdsRep,
+  filterOutcome,
+  searchQuery,
+  onDelete,
+}) {
   const navigate = useNavigate()
 
   const filtered = reviews.filter((r) => {
     if (filterFirm && r.metadata?.firm !== filterFirm) return false
     if (filterAdvisor && r.metadata?.advisor_name !== filterAdvisor) return false
+    if (filterTemplate && r.metadata?.template_name !== filterTemplate) return false
+    if (filterBdsRep && r.metadata?.bds_rep_name !== filterBdsRep) return false
     if (filterOutcome === NO_OUTCOME) {
       if (r.metadata?.call_outcome) return false
     } else if (filterOutcome && r.metadata?.call_outcome !== filterOutcome) {
@@ -186,6 +197,8 @@ export default function ReviewList({ reviews, filterFirm, filterAdvisor, filterO
         r.metadata?.firm,
         r.metadata?.prospect_name,
         r.metadata?.call_outcome,
+        r.metadata?.template_name,
+        r.metadata?.bds_rep_name,
       ].filter(Boolean).join(' ').toLowerCase()
       if (!searchable.includes(q)) return false
     }
