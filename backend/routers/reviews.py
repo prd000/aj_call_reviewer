@@ -130,6 +130,7 @@ async def chat_about_review(
             transcript,
             review.get("speaker_map", {}),
             [m.model_dump() for m in body.messages],
+            framework=review.get("framework"),
         )
         return ChatResponse(answer=answer)
     except LLMUnavailableError:

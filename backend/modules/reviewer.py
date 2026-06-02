@@ -91,18 +91,23 @@ class LLMUnavailableError(RuntimeError):
 
 CHAT_SYSTEM_PROMPT_TEMPLATE = (
     "You are a call review assistant. You have been given a complete transcript of a "
-    "financial advisor's sales call.\n\n"
-    "Your sole job is to answer questions about THIS transcript. You must:\n"
-    "- Use ONLY information from this transcript. Do not use outside knowledge.\n"
-    "- If a question cannot be answered from the transcript, reply exactly: "
-    '"I can only answer questions about this call\'s transcript."\n'
+    "financial advisor's sales call{framework_clause}.\n\n"
+    "Your sole job is to answer questions about THIS call. You must:\n"
+    "- Base all factual claims about what was said ONLY on the transcript. Do not use "
+    "outside knowledge.\n"
+    "- If a question cannot be answered from the transcript or the review framework, "
+    'reply exactly: "I can only answer questions about this call\'s transcript."\n'
     "- Cite EVERY relevant moment with its timestamp and a short verbatim quote, "
     'e.g. 00:01:23 — "the advisor said..."\n'
     "- Timestamps must exactly match a bracketed line in the transcript below.\n"
     "- You may offer light interpretation ONLY when it is directly anchored to a "
     "cited, timestamped quote.\n"
     "- Refer to speakers by their role label (Advisor, Prospect, etc.) as shown in "
-    "the transcript.\n\n"
+    "the transcript.\n"
+    "- When a question relates to how the call was evaluated, use the review framework "
+    "below for context, but still cite transcript evidence for any claim about what "
+    "actually happened on the call.\n\n"
+    "{framework_section}"
     "Transcript:\n{transcript}"
 )
 
@@ -123,18 +128,63 @@ def _format_transcript_labeled(transcript: list[dict], speaker_map: dict) -> str
     return "\n".join(lines)
 
 
-def chat_about_transcript(transcript: list[dict], speaker_map: dict, messages: list[dict]) -> str:
+def _format_framework(framework: dict | None) -> str:
     """
-    Respond to a user question grounded strictly in the given transcript.
+    Render the review framework (the criteria the call was scored against) as a
+    readable block for the chat system prompt. Returns "" when no framework is
+    available (e.g. legacy records), so the prompt section is simply omitted.
+    """
+    if not framework:
+        return ""
+    criteria = framework.get("criteria") or []
+    if not criteria:
+        return ""
+
+    name = framework.get("template_name") or "Review Framework"
+    lines = [f"Review Framework: {name}"]
+    for i, criterion in enumerate(criteria, 1):
+        title = criterion.get("title") or criterion.get("description", "")[:60]
+        description = criterion.get("description", "")
+        success = criterion.get("success_condition", "")
+        max_score = criterion.get("max_score", 10)
+        lines.append(f"{i}. {title} (max score {max_score})")
+        if description:
+            lines.append(f"   Criteria: {description}")
+        if success:
+            lines.append(f"   Success when: {success}")
+    return "\n".join(lines) + "\n\n"
+
+
+def chat_about_transcript(
+    transcript: list[dict],
+    speaker_map: dict,
+    messages: list[dict],
+    framework: dict | None = None,
+) -> str:
+    """
+    Respond to a user question grounded strictly in the given transcript, with the
+    review framework available as evaluation context.
 
     messages: [{"role": "user"|"assistant", "content": str}, ...], last entry is the new user turn.
+    framework: the review framework snapshot (template_name + criteria) the call was scored
+        against; optional (omitted from the prompt when absent).
     Raises LLMUnavailableError if no API key is configured.
     """
     if not get_llm_api_key():
         raise LLMUnavailableError("No LLM API key is configured.")
 
     transcript_text = _format_transcript_labeled(transcript, speaker_map)
-    system_prompt = CHAT_SYSTEM_PROMPT_TEMPLATE.format(transcript=transcript_text)
+    framework_section = _format_framework(framework)
+    framework_clause = (
+        ", along with the review framework it was evaluated against"
+        if framework_section
+        else ""
+    )
+    system_prompt = CHAT_SYSTEM_PROMPT_TEMPLATE.format(
+        framework_clause=framework_clause,
+        framework_section=framework_section,
+        transcript=transcript_text,
+    )
 
     if len(transcript) > 2000:
         logger.warning(
