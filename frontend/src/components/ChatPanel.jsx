@@ -41,11 +41,20 @@ export default function ChatPanel({
   const [retryAttempt, setRetryAttempt] = useState(0)
   const [input, setInput] = useState('')
   const bottomRef = useRef(null)
+  const textareaRef = useRef(null)
 
   // Auto-scroll to bottom when messages change or status changes.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, status])
+
+  // Auto-grow the textarea upward to fit its content; shrink back when cleared.
+  useEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [input])
 
   async function send(text) {
     if (!text.trim()) return
@@ -90,6 +99,14 @@ export default function ChatPanel({
     e.preventDefault()
     if (status === 'sending' || status === 'retrying' || !input.trim()) return
     send(input)
+  }
+
+  function handleKeyDown(e) {
+    // Enter sends; Shift+Enter inserts a newline.
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSubmit(e)
+    }
   }
 
   const isBusy = status === 'sending' || status === 'retrying'
@@ -144,12 +161,14 @@ export default function ChatPanel({
       </div>
 
       <form className="chat-panel__input-row" onSubmit={handleSubmit}>
-        <input
+        <textarea
+          ref={textareaRef}
           className="chat-panel__input"
-          type="text"
+          rows={1}
           placeholder="Ask a question about this call…"
           value={input}
           onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
           disabled={isBusy || status === 'unavailable'}
           aria-label="Chat input"
         />
