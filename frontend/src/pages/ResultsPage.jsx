@@ -11,8 +11,8 @@ function RobotIcon() {
   // glyph reads dark on the yellow FAB via the parent's `color: var(--color-on-primary)`.
   return (
     <svg
-      width="26"
-      height="26"
+      width="28"
+      height="28"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
