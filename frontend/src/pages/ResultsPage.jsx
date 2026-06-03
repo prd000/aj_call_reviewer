@@ -6,6 +6,32 @@ import { useLoadingWatchdog } from '../hooks/useLoadingWatchdog'
 import { getReview, updateReviewOutcome } from '../services/api'
 import './ResultsPage.css'
 
+function RobotIcon() {
+  // Inline SVG (repo uses inline glyphs, no icon library). Strokes use currentColor so the
+  // glyph reads dark on the yellow FAB via the parent's `color: var(--color-on-primary)`.
+  return (
+    <svg
+      width="26"
+      height="26"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="4" y="8" width="16" height="11" rx="2.5" />
+      <path d="M12 4v4" />
+      <circle cx="12" cy="3" r="1.2" fill="currentColor" stroke="none" />
+      <path d="M4 12.5H2.5M20 12.5h1.5" />
+      <circle cx="9" cy="13" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="13" r="1.3" fill="currentColor" stroke="none" />
+      <path d="M9.5 16h5" />
+    </svg>
+  )
+}
+
 export default function ResultsPage() {
   const { id } = useParams()
   const [review, setReview] = useState(null)
@@ -101,17 +127,7 @@ export default function ResultsPage() {
 
         {!isLoading && !error && review && (
           <>
-            <div className="results-page__header">
-              <h1 className="results-page__title">Call Review</h1>
-              <button
-                className="results-page__chat-btn"
-                onClick={() => setIsChatOpen(true)}
-                disabled={!hasTranscript}
-                title={hasTranscript ? 'Chat about this call' : 'No transcript available'}
-              >
-                Ask AI
-              </button>
-            </div>
+            <h1 className="results-page__title">Call Review</h1>
             <ReviewResults
               review={review}
               onOutcomeChange={handleOutcomeChange}
@@ -124,14 +140,25 @@ export default function ResultsPage() {
       </div>
 
       {review && (
-        <ChatPanel
-          reviewId={id}
-          messages={chatMessages}
-          setMessages={setChatMessages}
-          isOpen={isChatOpen}
-          onClose={() => setIsChatOpen(false)}
-          onTimestampClick={(ts) => transcriptRef.current?.jumpTo(ts)}
-        />
+        <>
+          <button
+            className={`results-page__fab${isChatOpen ? ' results-page__fab--hidden' : ''}`}
+            onClick={() => setIsChatOpen(true)}
+            disabled={!hasTranscript}
+            title={hasTranscript ? 'Chat about this call' : 'No transcript available'}
+            aria-label="Ask AI about this call"
+          >
+            <RobotIcon />
+          </button>
+          <ChatPanel
+            reviewId={id}
+            messages={chatMessages}
+            setMessages={setChatMessages}
+            isOpen={isChatOpen}
+            onClose={() => setIsChatOpen(false)}
+            onTimestampClick={(ts) => transcriptRef.current?.jumpTo(ts)}
+          />
+        </>
       )}
     </div>
   )

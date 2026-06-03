@@ -1,0 +1,5 @@
+Transcript:
+{transcript}
+
+Category Scores:
+{scores_text}

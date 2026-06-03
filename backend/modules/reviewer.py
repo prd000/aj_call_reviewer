@@ -3,28 +3,9 @@ import json as _json
 import logging
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from modules.llm_config import get_llm, get_llm_api_key
+from prompts import load_prompt
 
 logger = logging.getLogger(__name__)
-
-SPEAKER_ID_PROMPT = (
-    "You are analyzing a financial advisor sales call transcript. "
-    "Based on the content of these opening segments, identify which speaker number is the "
-    "financial advisor/salesperson and which is the prospect/client. "
-    "Speakers are identified by their 0-indexed speaker number. "
-    "Respond with a JSON object in this exact format:\n"
-    '{{"advisor": <speaker_number>, "prospect": <speaker_number>}}\n\n'
-    "Do not include anything outside the JSON object."
-)
-
-CRITERION_PROMPT_TEMPLATE = (
-    "You are a call reviewer for financial advisors. Your current job is to analyze "
-    "this call recording based on the following criteria:\n\n"
-    "Criteria: {description}\n\n"
-    "You know this has been successfully accomplished when: {success_condition}\n\n"
-    "Respond with a JSON object in this exact format:\n"
-    '{{"score": <integer 1-{max_score}>, "feedback": "<2-3 sentences of coaching feedback>"}}\n\n'
-    "Do not include anything outside the JSON object."
-)
 
 STUB_REVIEW = {
     "summary": (
@@ -88,28 +69,6 @@ STUB_REVIEW = {
 class LLMUnavailableError(RuntimeError):
     pass
 
-
-CHAT_SYSTEM_PROMPT_TEMPLATE = (
-    "You are a call review assistant. You have been given a complete transcript of a "
-    "financial advisor's sales call{framework_clause}.\n\n"
-    "Your sole job is to answer questions about THIS call. You must:\n"
-    "- Base all factual claims about what was said ONLY on the transcript. Do not use "
-    "outside knowledge.\n"
-    "- If a question cannot be answered from the transcript or the review framework, "
-    'reply exactly: "I can only answer questions about this call\'s transcript."\n'
-    "- Cite EVERY relevant moment with its timestamp and a short verbatim quote, "
-    'e.g. 00:01:23 — "the advisor said..."\n'
-    "- Timestamps must exactly match a bracketed line in the transcript below.\n"
-    "- You may offer light interpretation ONLY when it is directly anchored to a "
-    "cited, timestamped quote.\n"
-    "- Refer to speakers by their role label (Advisor, Prospect, etc.) as shown in "
-    "the transcript.\n"
-    "- When a question relates to how the call was evaluated, use the review framework "
-    "below for context, but still cite transcript evidence for any claim about what "
-    "actually happened on the call.\n\n"
-    "{framework_section}"
-    "Transcript:\n{transcript}"
-)
 
 MAX_CHAT_HISTORY = 8
 
@@ -180,7 +139,7 @@ def chat_about_transcript(
         if framework_section
         else ""
     )
-    system_prompt = CHAT_SYSTEM_PROMPT_TEMPLATE.format(
+    system_prompt = load_prompt("chat.system").format(
         framework_clause=framework_clause,
         framework_section=framework_section,
         transcript=transcript_text,
@@ -215,7 +174,7 @@ def identify_speakers(transcript: list[dict]) -> dict:
         logger.warning("LLM API key not set; skipping speaker identification.")
         return {}
 
-    sample = [seg for seg in transcript[:10] if seg.get("speaker") is not None]
+    sample = [seg for seg in transcript[:20] if seg.get("speaker") is not None]
     speakers_present = {seg["speaker"] for seg in sample}
     if len(speakers_present) < 2:
         logger.warning("Fewer than 2 speakers found in sample; skipping speaker identification.")
@@ -229,8 +188,8 @@ def identify_speakers(transcript: list[dict]) -> dict:
         )
 
         messages = [
-            SystemMessage(content=SPEAKER_ID_PROMPT),
-            HumanMessage(content=f"Transcript sample:\n{sample_text}"),
+            SystemMessage(content=load_prompt("speaker_id.system")),
+            HumanMessage(content=load_prompt("speaker_id.user").format(sample_text=sample_text)),
         ]
         response = llm.invoke(messages)
         content = response.content.strip()
@@ -300,14 +259,14 @@ def review_call(transcript: list[dict], criteria: list[dict]) -> dict:
 
         for criterion in criteria:
             max_score = criterion.get("max_score", 10)
-            system_prompt = CRITERION_PROMPT_TEMPLATE.format(
+            system_prompt = load_prompt("criterion.system").format(
                 description=criterion["description"],
                 success_condition=criterion["success_condition"],
                 max_score=max_score,
             )
             messages = [
                 SystemMessage(content=system_prompt),
-                HumanMessage(content=f"Transcript:\n{transcript_text}"),
+                HumanMessage(content=load_prompt("criterion.user").format(transcript=transcript_text)),
             ]
             response = llm.invoke(messages)
             content = response.content.strip()
@@ -328,21 +287,17 @@ def review_call(transcript: list[dict], criteria: list[dict]) -> dict:
                 }
             )
 
-        summary_prompt = (
-            "You are a sales coach for financial advisors. "
-            "Given the following call transcript and category scores, "
-            "write a 3-4 sentence overall summary of the advisor's performance. "
-            "Be specific, constructive, and actionable. "
-            "Return only the summary text, no JSON."
-        )
         scores_text = "\n".join(
             f"- {c['name']}: {c['score']}/{c.get('max_score', 10)} — {c['feedback']}"
             for c in categories
         )
         summary_messages = [
-            SystemMessage(content=summary_prompt),
+            SystemMessage(content=load_prompt("summary.system")),
             HumanMessage(
-                content=f"Transcript:\n{transcript_text}\n\nCategory Scores:\n{scores_text}"
+                content=load_prompt("summary.user").format(
+                    transcript=transcript_text,
+                    scores_text=scores_text,
+                )
             ),
         ]
         summary_response = llm.invoke(summary_messages)

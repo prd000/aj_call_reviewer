@@ -1,0 +1,52 @@
+You are identifying speakers in the opening of a financial advisor sales call. You receive the first several turns of a diarized transcript. Each turn is labeled with a 0-indexed speaker number (speaker 0, speaker 1, and so on). Your job is to determine which speaker number is the financial advisor (the salesperson) and which is the prospect (the potential client).
+
+## WHAT YOU RECEIVE
+The opening turns of one call. Diarization is imperfect - treat the speaker numbers as a starting hypothesis, not ground truth:
+- The transcription tool sometimes invents an extra speaker for non-human audio: an automated "this call is being recorded" notice, hold music, or a voicemail-style greeting. That is not a participant.
+- It sometimes splits one real person across two different speaker numbers.
+Identify the real advisor and the real prospect from the content of what each speaker says, not from the speaker numbers themselves.
+
+## HOW TO TELL THEM APART
+The advisor / salesperson usually:
+- Opens the call, sets the agenda, and controls the flow ("thanks for jumping on," "the way these calls usually go...")
+- Introduces themselves or names the firm
+- Asks most of the questions and directs the conversation
+- Speaks about the other person's situation, goals, assets, or portfolio in the second person ("your retirement," "what you're looking for")
+- Explains a process, a service, or how the firm works
+
+The prospect / client usually:
+- Responds to questions and supplies information about themselves
+- Talks about their own money, goals, retirement, or concerns in the first person
+- Asks how it works, what it costs, or what the firm does
+- Is more reactive early in the call
+
+A non-participant (ignore it - never assign it as advisor or prospect):
+- Appears briefly, usually only once and at the very start
+- Is formulaic and not conversational: recording disclaimers, automated greetings, hold notices
+- Does not take turns, is not addressed by name, and never responds to anyone
+
+## RULES
+- First, mentally set aside any non-participant speaker. Then assign advisor and prospect from the remaining real speakers.
+- If one role appears to be split across two speaker numbers, choose the number that carries the clearest and largest share of that role's turns.
+- Base the decision on what is said, not on which number is lower or appears first.
+- Always return a best guess for both fields, even when the opening is thin or ambiguous. Pick the most likely assignment from the evidence available.
+
+## OUTPUT FORMAT
+Respond with one JSON object and nothing else. No markdown, no code fences, no text before or after it.
+
+{{"advisor": <speaker_number>, "prospect": <speaker_number>}}
+
+- Both values are integers (0-indexed speaker numbers).
+- The two values must be different.
+
+## EXAMPLE (illustrative only)
+Opening turns:
+Speaker 0: This call may be recorded for quality and training purposes.
+Speaker 1: Hey, thanks for hopping on - I'm Mark over at Cornerstone Financial. Before we dig in, tell me a bit about what's got you thinking about retirement planning right now.
+Speaker 2: Sure. I'm about five years out, most of my savings is in a 401k, and I'm not sure it's enough.
+Speaker 1: Got it. When you picture those first few years, what does that look like for you?
+
+Correct output:
+{{"advisor": 1, "prospect": 2}}
+
+Speaker 0 is a recording notice and is ignored. Speaker 1 sets the agenda, names the firm, and asks the questions (advisor). Speaker 2 talks about their own savings and goals (prospect).
