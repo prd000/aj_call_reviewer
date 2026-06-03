@@ -1,11 +1,14 @@
 import logging
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 
 from modules.auth import get_current_user
+from modules.firms import list_firms
 from modules.ingestion import CallOutcome
+from modules.reviewer import LLMUnavailableError, chat_about_transcript
 from modules.storage import (
     delete_recording_from_storage,
     delete_review,
@@ -13,13 +16,14 @@ from modules.storage import (
     list_reviews,
     update_review_outcome,
 )
+from modules.user_profiles import list_bds_reps
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-def _review_summary(review: dict) -> dict:
+def _review_summary(review: dict, firm_rep_map: dict | None = None) -> dict:
     overall_score = None
     overall_max_score = None
     categories = review.get("review", {}).get("categories", [])
@@ -31,19 +35,58 @@ def _review_summary(review: dict) -> dict:
             overall_score = round((total_score / total_max) * 10, 1)
             overall_max_score = 10
 
+    # Surface the review template (from the framework snapshot) and the firm's
+    # assigned BDS rep alongside the existing advisor/firm/outcome metadata so the
+    # history filters can read them the same way. bds_rep_name is only resolved for
+    # BDS-rep callers (firm_rep_map provided); FA responses omit it.
+    metadata = dict(review.get("metadata", {}))
+    framework = review.get("framework") or {}
+    metadata["template_name"] = framework.get("template_name")
+    if firm_rep_map is not None:
+        metadata["bds_rep_name"] = firm_rep_map.get(review.get("firm_id"))
+
     return {
         "id": review["id"],
         "created_at": review["created_at"],
         "status": review.get("status", "pending"),
-        "metadata": review.get("metadata", {}),
+        "metadata": metadata,
         "overall_score": overall_score,
         "overall_max_score": overall_max_score,
+    }
+
+
+async def _build_firm_bds_rep_map() -> dict:
+    """Map firm_id -> assigned BDS rep name, resolving firms.bds_rep_id via profiles.
+
+    Used to annotate review summaries for BDS reps so history can filter by the
+    BDS rep assigned to each review's firm.
+    """
+    firms = await list_firms()
+    reps = await list_bds_reps()
+    rep_name_by_id = {r["id"]: r.get("name") for r in reps}
+    return {
+        f["id"]: rep_name_by_id.get(f.get("bds_rep_id"))
+        for f in firms
+        if f.get("bds_rep_id")
     }
 
 
 class OutcomeBody(BaseModel):
     # None clears the outcome; any non-canonical string is rejected with 422.
     call_outcome: CallOutcome | None = None
+
+
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class ChatBody(BaseModel):
+    messages: list[ChatMessage]
+
+
+class ChatResponse(BaseModel):
+    answer: str
 
 
 def _fa_can_access(review: dict, user: dict) -> bool:
@@ -61,9 +104,11 @@ async def get_reviews(user: dict = Depends(get_current_user)):
             firm_id=user["firm_id"],
             uploader_role="financial_advisor",
         )
-    else:
-        all_reviews = await list_reviews()
-    return [_review_summary(r) for r in all_reviews]
+        return [_review_summary(r) for r in all_reviews]
+
+    all_reviews = await list_reviews()
+    firm_rep_map = await _build_firm_bds_rep_map()
+    return [_review_summary(r, firm_rep_map) for r in all_reviews]
 
 
 @router.get("/reviews/{review_id}")
@@ -90,6 +135,45 @@ async def update_review_outcome_by_id(
     # Outcome is metadata, editable regardless of review status.
     await update_review_outcome(review_id, body.call_outcome)
     return await get_review(review_id)
+
+
+@router.post("/reviews/{review_id}/chat", response_model=ChatResponse)
+async def chat_about_review(
+    review_id: str,
+    body: ChatBody,
+    user: dict = Depends(get_current_user),
+):
+    review = await get_review(review_id)
+    if review is None:
+        raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
+    if user["role"] == "financial_advisor" and not _fa_can_access(review, user):
+        raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
+
+    transcript = review.get("transcript") or []
+    if not transcript:
+        raise HTTPException(status_code=400, detail="This review has no transcript to chat about.")
+    if not body.messages or body.messages[-1].role != "user":
+        raise HTTPException(status_code=400, detail="Last message must be from the user.")
+
+    try:
+        answer = chat_about_transcript(
+            transcript,
+            review.get("speaker_map", {}),
+            [m.model_dump() for m in body.messages],
+            framework=review.get("framework"),
+        )
+        return ChatResponse(answer=answer)
+    except LLMUnavailableError:
+        raise HTTPException(
+            status_code=503,
+            detail="Chat is unavailable: no AI provider is configured.",
+        )
+    except Exception as exc:
+        logger.error("chat_about_review failed: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=502,
+            detail="Couldn't get an answer. Please try again later.",
+        )
 
 
 @router.delete("/reviews/{review_id}", status_code=204)

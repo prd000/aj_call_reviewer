@@ -22,15 +22,51 @@
   color: var(--color-primary);
 }
 
-.results-page__header {
-  margin-bottom: var(--space-xl);
-}
-
 .results-page__title {
   font-size: 28px;
   font-weight: 700;
   color: var(--color-on-dark);
   line-height: 1.2;
+  margin-bottom: var(--space-xl);
+}
+
+/* Floating "Ask AI" robot button — fixed below the top nav, stays visible while scrolling.
+   Hidden while the chat panel is open (the panel's own ✕ closes it, which un-hides this). */
+.results-page__fab {
+  position: fixed;
+  top: calc(64px + var(--space-md)); /* clears the 64px sticky top-nav */
+  right: var(--space-lg);
+  z-index: 95; /* above content and the chat-panel (z-index 90) */
+  width: 40px;
+  height: 40px;
+  border-radius: var(--rounded-pill);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(252, 213, 53, 0.85); /* --color-primary, translucent */
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  color: var(--color-on-primary);
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+  transition: background-color var(--transition-fast), opacity var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.results-page__fab:hover:not(:disabled) {
+  background-color: rgba(240, 185, 11, 0.9); /* --color-primary-active */
+}
+
+.results-page__fab:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.results-page__fab--hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.8);
 }
 
 /* Loading state */

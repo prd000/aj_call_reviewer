@@ -19,6 +19,8 @@ export default function HistoryPage() {
   const [filterFirm, setFilterFirm] = useState('')
   useLoadingWatchdog(isLoading, setIsLoading, { label: 'history' })
   const [filterAdvisor, setFilterAdvisor] = useState('')
+  const [filterTemplate, setFilterTemplate] = useState('')
+  const [filterBdsRep, setFilterBdsRep] = useState('')
   const [filterOutcome, setFilterOutcome] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [firms, setFirms] = useState([])
@@ -34,6 +36,19 @@ export default function HistoryPage() {
     const advisors = reviews.map((r) => r.metadata?.advisor_name).filter(Boolean)
     return [...new Set(advisors)].sort()
   }, [reviews])
+
+  // BDS-only filters; derived from loaded reviews like the advisor filter
+  const templateOptions = useMemo(() => {
+    if (!isBds) return []
+    const templates = reviews.map((r) => r.metadata?.template_name).filter(Boolean)
+    return [...new Set(templates)].sort()
+  }, [isBds, reviews])
+
+  const bdsRepOptions = useMemo(() => {
+    if (!isBds) return []
+    const reps = reviews.map((r) => r.metadata?.bds_rep_name).filter(Boolean)
+    return [...new Set(reps)].sort()
+  }, [isBds, reviews])
 
   async function handleDelete(id) {
     await deleteReview(id)
@@ -172,6 +187,44 @@ export default function HistoryPage() {
               </div>
             )}
 
+            {isBds && templateOptions.length > 0 && (
+              <div className="history-page__filter history-page__filter--select">
+                <label htmlFor="template-filter" className="history-page__filter-label">
+                  Template
+                </label>
+                <SearchableSelect
+                  id="template-filter"
+                  size="sm"
+                  options={[
+                    { value: '', label: 'All' },
+                    ...templateOptions.map((t) => ({ value: t, label: t })),
+                  ]}
+                  value={filterTemplate}
+                  onChange={setFilterTemplate}
+                  placeholder="All"
+                />
+              </div>
+            )}
+
+            {isBds && bdsRepOptions.length > 0 && (
+              <div className="history-page__filter history-page__filter--select">
+                <label htmlFor="bds-rep-filter" className="history-page__filter-label">
+                  BDS Rep
+                </label>
+                <SearchableSelect
+                  id="bds-rep-filter"
+                  size="sm"
+                  options={[
+                    { value: '', label: 'All' },
+                    ...bdsRepOptions.map((r) => ({ value: r, label: r })),
+                  ]}
+                  value={filterBdsRep}
+                  onChange={setFilterBdsRep}
+                  placeholder="All"
+                />
+              </div>
+            )}
+
             <div className="history-page__filter history-page__filter--select">
               <label htmlFor="outcome-filter" className="history-page__filter-label">
                 Outcome
@@ -193,6 +246,8 @@ export default function HistoryPage() {
             reviews={reviews}
             filterFirm={filterFirm}
             filterAdvisor={filterAdvisor}
+            filterTemplate={filterTemplate}
+            filterBdsRep={filterBdsRep}
             filterOutcome={filterOutcome}
             searchQuery={searchQuery}
             onDelete={handleDelete}

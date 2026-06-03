@@ -1,0 +1,2 @@
+Transcript sample:
+{sample_text}
