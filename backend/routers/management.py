@@ -59,7 +59,10 @@ async def get_firms(user: dict = Depends(require_bds_rep)):
 
 @router.post("/firms")
 async def create_firm(body: FirmBody, user: dict = Depends(require_bds_rep)):
-    return await save_firm(body.model_dump())
+    data = body.model_dump()
+    if not data.get("bds_rep_id"):
+        data["bds_rep_id"] = user["user_id"]
+    return await save_firm(data)
 
 
 @router.get("/firms/{firm_id}")
