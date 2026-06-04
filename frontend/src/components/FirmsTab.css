@@ -6,7 +6,39 @@
 }
 
 .firms-tab__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
   margin-bottom: var(--space-md);
+}
+
+.firms-tab__search {
+  flex: 1;
+  height: 36px;
+  padding: 0 var(--space-md);
+  background-color: var(--color-surface-elevated);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-md);
+  color: var(--color-on-dark);
+  font-size: 14px;
+  font-family: var(--font-family);
+  min-width: 200px;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.firms-tab__search::placeholder {
+  color: var(--color-muted);
+}
+
+.firms-tab__search:focus {
+  border-color: var(--color-info);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+}
+
+.firms-tab__toolbar .mgmt-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .firms-tab__add-form {
