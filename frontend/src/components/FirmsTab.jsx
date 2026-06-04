@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { createFirm, listFirms, listTemplates } from '../services/api'
 import { useLoadingWatchdog } from '../hooks/useLoadingWatchdog'
@@ -9,6 +9,7 @@ export default function FirmsTab() {
   const [templates, setTemplates] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [showAddForm, setShowAddForm] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
   useLoadingWatchdog(isLoading, setIsLoading, { label: 'firms' })
   const [newName, setNewName] = useState('')
   const [newTemplateId, setNewTemplateId] = useState('')
@@ -49,11 +50,29 @@ export default function FirmsTab() {
     }
   }
 
+  const filteredFirms = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return firms
+    return firms.filter((firm) => {
+      const name = firm.name?.toLowerCase() || ''
+      const template = firm.templates?.name?.toLowerCase() || ''
+      return name.includes(q) || template.includes(q)
+    })
+  }, [firms, searchQuery])
+
   if (isLoading) return <div className="firms-tab__loading">Loading firms…</div>
 
   return (
     <div className="firms-tab">
       <div className="firms-tab__toolbar">
+        <input
+          type="text"
+          className="firms-tab__search"
+          placeholder="Search firms…"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          aria-label="Search firms"
+        />
         <button
           className="mgmt-btn mgmt-btn--primary"
           onClick={() => { setShowAddForm((v) => !v); setAddError(null) }}
@@ -91,9 +110,11 @@ export default function FirmsTab() {
 
       {firms.length === 0 ? (
         <p className="firms-tab__empty">No firms yet. Add one above.</p>
+      ) : filteredFirms.length === 0 ? (
+        <p className="firms-tab__empty">No firms match “{searchQuery.trim()}”.</p>
       ) : (
         <div className="firms-tab__list">
-          {firms.map((firm) => (
+          {filteredFirms.map((firm) => (
             <div
               key={firm.id}
               className="firms-tab__row"
