@@ -33,15 +33,27 @@ def get_llm_api_key() -> str:
     return os.environ.get(config["api_key_env"], "").strip()
 
 
-def get_llm(temperature: float) -> ChatOpenAI:
+def get_llm(temperature: float, role: str | None = None) -> ChatOpenAI:
     provider = _get_provider_name()
     config = PROVIDER_CONFIG.get(provider)
     if config is None:
         raise KeyError(f"Unknown LLM_PROVIDER {provider!r}. Supported: {', '.join(PROVIDER_CONFIG)}")
-    model_name = os.environ.get("LLM_MODEL", config["default_model"]).strip()
+    if role == "history_chat":
+        # CHAT_AGENT_MODEL takes precedence for the history chat agent;
+        # falls back to LLM_MODEL then the provider default.
+        model_name = (
+            os.environ.get("CHAT_AGENT_MODEL", "").strip()
+            or os.environ.get("LLM_MODEL", "").strip()
+            or config["default_model"]
+        )
+    else:
+        model_name = os.environ.get("LLM_MODEL", config["default_model"]).strip()
     api_key = os.environ.get(config["api_key_env"], "").strip()
-    kwargs = {"model": model_name, "api_key": api_key, "temperature": temperature}
+    kwargs: dict = {"model": model_name, "api_key": api_key, "temperature": temperature}
     if config["base_url"] is not None:
         kwargs["base_url"] = config["base_url"]
-    logger.debug("Building LLM: provider=%s model=%s base_url=%s", provider, model_name, config["base_url"])
+    logger.debug(
+        "Building LLM: provider=%s model=%s base_url=%s role=%s",
+        provider, model_name, config["base_url"], role,
+    )
     return ChatOpenAI(**kwargs)

@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { chatAboutReview } from '../services/api'
 import './ChatPanel.css'
 
 const MAX_ATTEMPTS = 3
@@ -30,12 +29,16 @@ function renderWithTimestamps(text, onTimestampClick) {
 }
 
 export default function ChatPanel({
-  reviewId,
+  onSend,
   messages,
   setMessages,
   isOpen,
   onClose,
   onTimestampClick,
+  title = 'Ask about this call',
+  subtitle,
+  emptyStateText = "Ask anything about this call's transcript.",
+  inputPlaceholder = 'Ask a question about this call…',
 }) {
   const [status, setStatus] = useState('idle') // idle | sending | retrying | unavailable | failed
   const [retryAttempt, setRetryAttempt] = useState(0)
@@ -72,7 +75,7 @@ export default function ChatPanel({
         setRetryAttempt(attempt)
       }
       try {
-        const { answer } = await chatAboutReview(reviewId, nextMessages)
+        const { answer } = await onSend(nextMessages)
         setMessages([...nextMessages, { role: 'assistant', content: answer }])
         setStatus('idle')
         return
@@ -114,7 +117,10 @@ export default function ChatPanel({
   return (
     <div className={`chat-panel${isOpen ? ' chat-panel--open' : ''}`} aria-hidden={!isOpen}>
       <div className="chat-panel__header">
-        <span className="chat-panel__title">Ask about this call</span>
+        <div className="chat-panel__header-text">
+          <span className="chat-panel__title">{title}</span>
+          {subtitle && <span className="chat-panel__subtitle">{subtitle}</span>}
+        </div>
         <button className="chat-panel__close" onClick={onClose} aria-label="Close chat">
           &#10005;
         </button>
@@ -122,7 +128,7 @@ export default function ChatPanel({
 
       <div className="chat-panel__messages">
         {messages.length === 0 && status !== 'unavailable' && (
-          <p className="chat-panel__empty">Ask anything about this call&rsquo;s transcript.</p>
+          <p className="chat-panel__empty">{emptyStateText}</p>
         )}
 
         {messages.map((msg, i) => (
@@ -130,7 +136,7 @@ export default function ChatPanel({
             key={i}
             className={`chat-panel__bubble chat-panel__bubble--${msg.role}`}
           >
-            {msg.role === 'assistant'
+            {msg.role === 'assistant' && onTimestampClick
               ? renderWithTimestamps(msg.content, onTimestampClick)
               : msg.content}
           </div>
@@ -165,7 +171,7 @@ export default function ChatPanel({
           ref={textareaRef}
           className="chat-panel__input"
           rows={1}
-          placeholder="Ask a question about this call…"
+          placeholder={inputPlaceholder}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}

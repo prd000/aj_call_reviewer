@@ -132,3 +132,41 @@
   border-color: var(--color-info);
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
 }
+
+/* Floating "Ask AI" robot button — fixed below top-nav, mirrors ResultsPage FAB */
+.history-page__fab {
+  position: fixed;
+  top: calc(64px + var(--space-md));
+  right: var(--space-lg);
+  z-index: 95;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--rounded-pill);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(252, 213, 53, 0.85);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  color: var(--color-on-primary);
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+  transition: background-color var(--transition-fast), opacity var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.history-page__fab:hover:not(:disabled) {
+  background-color: rgba(240, 185, 11, 0.9);
+}
+
+.history-page__fab:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.history-page__fab--hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.8);
+}

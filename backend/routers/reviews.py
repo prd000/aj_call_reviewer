@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from modules.auth import get_current_user
 from modules.firms import list_firms
 from modules.ingestion import CallOutcome
+from modules.history_chat import chat_over_reviews
 from modules.reviewer import LLMUnavailableError, chat_about_transcript
 from modules.storage import (
     delete_recording_from_storage,
@@ -87,6 +88,11 @@ class ChatBody(BaseModel):
 
 class ChatResponse(BaseModel):
     answer: str
+
+
+class HistoryChatBody(BaseModel):
+    review_ids: list[str]
+    messages: list[ChatMessage]
 
 
 def _fa_can_access(review: dict, user: dict) -> bool:
@@ -170,6 +176,50 @@ async def chat_about_review(
         )
     except Exception as exc:
         logger.error("chat_about_review failed: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=502,
+            detail="Couldn't get an answer. Please try again later.",
+        )
+
+
+@router.post("/reviews/history-chat", response_model=ChatResponse)
+async def chat_over_history(
+    body: HistoryChatBody,
+    user: dict = Depends(get_current_user),
+):
+    if not body.messages or body.messages[-1].role != "user":
+        raise HTTPException(status_code=400, detail="Last message must be from the user.")
+
+    # Resolve scope server-side: drop unknown, non-complete, and FA-invisible IDs.
+    scoped: list[dict] = []
+    for rid in body.review_ids:
+        review = await get_review(rid)
+        if review is None:
+            continue
+        if review.get("status") != "complete":
+            continue
+        if user["role"] == "financial_advisor" and not _fa_can_access(review, user):
+            continue
+        # Complete reviews must have scored categories to be useful.
+        if not (review.get("review") or {}).get("categories"):
+            continue
+        scoped.append(review)
+
+    if not scoped:
+        return ChatResponse(
+            answer="No completed calls match the current filters. Try broadening your search."
+        )
+
+    try:
+        answer = chat_over_reviews(scoped, [m.model_dump() for m in body.messages])
+        return ChatResponse(answer=answer)
+    except LLMUnavailableError:
+        raise HTTPException(
+            status_code=503,
+            detail="Chat is unavailable: no AI provider is configured.",
+        )
+    except Exception as exc:
+        logger.error("chat_over_history failed: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=502,
             detail="Couldn't get an answer. Please try again later.",
