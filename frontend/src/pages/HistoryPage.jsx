@@ -41,12 +41,13 @@ export default function HistoryPage() {
   const [reviews, setReviews] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [filterFirm, setFilterFirm] = useState('')
+  // Filters are multi-select: each holds an array of selected values ([] = All).
+  const [filterFirm, setFilterFirm] = useState([])
   useLoadingWatchdog(isLoading, setIsLoading, { label: 'history' })
-  const [filterAdvisor, setFilterAdvisor] = useState('')
-  const [filterTemplate, setFilterTemplate] = useState('')
-  const [filterBdsRep, setFilterBdsRep] = useState('')
-  const [filterOutcome, setFilterOutcome] = useState('')
+  const [filterAdvisor, setFilterAdvisor] = useState([])
+  const [filterTemplate, setFilterTemplate] = useState([])
+  const [filterBdsRep, setFilterBdsRep] = useState([])
+  const [filterOutcome, setFilterOutcome] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
   const [firms, setFirms] = useState([])
   const pollingRef = useRef(null)
@@ -82,14 +83,17 @@ export default function HistoryPage() {
   // Lift filtering here so we can derive visibleIds for the history chat.
   const visibleReviews = useMemo(() => {
     return reviews.filter((r) => {
-      if (filterFirm && r.metadata?.firm !== filterFirm) return false
-      if (filterAdvisor && r.metadata?.advisor_name !== filterAdvisor) return false
-      if (filterTemplate && r.metadata?.template_name !== filterTemplate) return false
-      if (filterBdsRep && r.metadata?.bds_rep_name !== filterBdsRep) return false
-      if (filterOutcome === NO_OUTCOME) {
-        if (r.metadata?.call_outcome) return false
-      } else if (filterOutcome && r.metadata?.call_outcome !== filterOutcome) {
-        return false
+      // Each filter is an OR within itself; an empty array means "no filter".
+      if (filterFirm.length && !filterFirm.includes(r.metadata?.firm)) return false
+      if (filterAdvisor.length && !filterAdvisor.includes(r.metadata?.advisor_name)) return false
+      if (filterTemplate.length && !filterTemplate.includes(r.metadata?.template_name)) return false
+      if (filterBdsRep.length && !filterBdsRep.includes(r.metadata?.bds_rep_name)) return false
+      if (filterOutcome.length) {
+        const oc = r.metadata?.call_outcome
+        const matches = filterOutcome.some((sel) =>
+          sel === NO_OUTCOME ? !oc : oc === sel
+        )
+        if (!matches) return false
       }
       if (searchQuery) {
         const q = searchQuery.toLowerCase()
@@ -218,6 +222,7 @@ export default function HistoryPage() {
                 <SearchableSelect
                   id="advisor-filter"
                   size="sm"
+                  multiple
                   options={[
                     { value: '', label: 'All' },
                     ...advisorOptions.map((a) => ({ value: a, label: a })),
@@ -237,6 +242,7 @@ export default function HistoryPage() {
                 <SearchableSelect
                   id="firm-filter"
                   size="sm"
+                  multiple
                   options={[
                     { value: '', label: 'All' },
                     ...firmOptions.map((f) => ({ value: f, label: f })),
@@ -256,6 +262,7 @@ export default function HistoryPage() {
                 <SearchableSelect
                   id="template-filter"
                   size="sm"
+                  multiple
                   options={[
                     { value: '', label: 'All' },
                     ...templateOptions.map((t) => ({ value: t, label: t })),
@@ -275,6 +282,7 @@ export default function HistoryPage() {
                 <SearchableSelect
                   id="bds-rep-filter"
                   size="sm"
+                  multiple
                   options={[
                     { value: '', label: 'All' },
                     ...bdsRepOptions.map((r) => ({ value: r, label: r })),
@@ -293,6 +301,7 @@ export default function HistoryPage() {
               <SearchableSelect
                 id="outcome-filter"
                 size="sm"
+                multiple
                 options={OUTCOME_FILTER_OPTIONS}
                 value={filterOutcome}
                 onChange={setFilterOutcome}

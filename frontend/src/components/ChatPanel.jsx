@@ -1,32 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
+import MarkdownMessage from './MarkdownMessage'
 import './ChatPanel.css'
 
 const MAX_ATTEMPTS = 3
 const BACKOFF_MS = [600, 1500]
-
-function renderWithTimestamps(text, onTimestampClick) {
-  // Regex must be constructed inside the function to avoid stale lastIndex.
-  const RE = /\b(\d{2}:\d{2}:\d{2})\b/g
-  const parts = []
-  let last = 0
-  let match
-  while ((match = RE.exec(text)) !== null) {
-    if (match.index > last) parts.push(text.slice(last, match.index))
-    const ts = match[1]
-    parts.push(
-      <button
-        key={match.index}
-        className="chat-panel__ts"
-        onClick={() => onTimestampClick(ts)}
-      >
-        {ts}
-      </button>,
-    )
-    last = RE.lastIndex
-  }
-  if (last < text.length) parts.push(text.slice(last))
-  return parts
-}
 
 export default function ChatPanel({
   onSend,
@@ -136,8 +113,8 @@ export default function ChatPanel({
             key={i}
             className={`chat-panel__bubble chat-panel__bubble--${msg.role}`}
           >
-            {msg.role === 'assistant' && onTimestampClick
-              ? renderWithTimestamps(msg.content, onTimestampClick)
+            {msg.role === 'assistant'
+              ? <MarkdownMessage content={msg.content} onTimestampClick={onTimestampClick} />
               : msg.content}
           </div>
         ))}
