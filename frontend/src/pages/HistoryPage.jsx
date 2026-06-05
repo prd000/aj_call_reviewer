@@ -48,6 +48,8 @@ export default function HistoryPage() {
   const [filterTemplate, setFilterTemplate] = useState([])
   const [filterBdsRep, setFilterBdsRep] = useState([])
   const [filterOutcome, setFilterOutcome] = useState([])
+  const [filterDateFrom, setFilterDateFrom] = useState('')
+  const [filterDateTo, setFilterDateTo] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [firms, setFirms] = useState([])
   const pollingRef = useRef(null)
@@ -95,6 +97,11 @@ export default function HistoryPage() {
         )
         if (!matches) return false
       }
+      if (filterDateFrom || filterDateTo) {
+        const reviewDate = r.created_at?.slice(0, 10)
+        if (filterDateFrom && reviewDate < filterDateFrom) return false
+        if (filterDateTo && reviewDate > filterDateTo) return false
+      }
       if (searchQuery) {
         const q = searchQuery.toLowerCase()
         const searchable = [
@@ -109,7 +116,7 @@ export default function HistoryPage() {
       }
       return true
     })
-  }, [reviews, filterFirm, filterAdvisor, filterTemplate, filterBdsRep, filterOutcome, searchQuery])
+  }, [reviews, filterFirm, filterAdvisor, filterTemplate, filterBdsRep, filterOutcome, filterDateFrom, filterDateTo, searchQuery])
 
   const visibleIds = useMemo(() => visibleReviews.map((r) => r.id), [visibleReviews])
 
@@ -211,6 +218,32 @@ export default function HistoryPage() {
                 placeholder="Advisor, firm, prospect…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+
+            <div className="history-page__filter">
+              <label htmlFor="date-from-filter" className="history-page__filter-label">
+                From
+              </label>
+              <input
+                id="date-from-filter"
+                type="date"
+                className="history-page__date-input"
+                value={filterDateFrom}
+                onChange={(e) => setFilterDateFrom(e.target.value)}
+              />
+            </div>
+
+            <div className="history-page__filter">
+              <label htmlFor="date-to-filter" className="history-page__filter-label">
+                To
+              </label>
+              <input
+                id="date-to-filter"
+                type="date"
+                className="history-page__date-input"
+                value={filterDateTo}
+                onChange={(e) => setFilterDateTo(e.target.value)}
               />
             </div>
 

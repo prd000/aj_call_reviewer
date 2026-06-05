@@ -91,46 +91,48 @@ export default function UploadPage() {
   return (
     <div className="upload-page">
       <div className="page-container">
-        <div className="upload-page__header">
-          <h1 className="upload-page__title">Upload a Call Recording</h1>
-          <p className="upload-page__subtitle">
-            {isBds
-              ? 'Select the firm and advisor, attach the recording, and generate a coaching review.'
-              : 'Enter the prospect details, attach the recording, and generate a coaching review.'}
-          </p>
-        </div>
-
-        {error && (
-          <div className="upload-page__error" role="alert">
-            <span className="upload-page__error-icon" aria-hidden="true">&#9888;</span>
-            {error}
+        <div className="upload-page__body">
+          <div className="upload-page__header">
+            <h1 className="upload-page__title">Upload a Call Recording</h1>
+            <p className="upload-page__subtitle">
+              {isBds
+                ? 'Select the firm and advisor, attach the recording, and generate a coaching review.'
+                : 'Enter the prospect details, attach the recording, and generate a coaching review.'}
+            </p>
           </div>
-        )}
 
-        <div className="upload-page__form-card">
-          <UploadForm
-            onSubmit={handleSubmit}
-            isLoading={isLoading}
-            userRole={user?.role}
-            userName={user?.name}
-            userFirmName={user?.firm_name}
-            firms={firms}
-            firmAdvisors={firmAdvisors}
-            onFirmChange={handleFirmChange}
-            selectedFirmId={selectedFirmId}
-            selectedAdvisorId={selectedAdvisorId}
-            onSelectFirm={setSelectedFirmId}
-            onSelectAdvisor={setSelectedAdvisorId}
-            onCreateFirm={handleCreateFirm}
-            onCreateAdvisor={handleCreateAdvisor}
-          />
-        </div>
+          {error && (
+            <div className="upload-page__error" role="alert">
+              <span className="upload-page__error-icon" aria-hidden="true">&#9888;</span>
+              {error}
+            </div>
+          )}
 
-        {isBds && (
-          <div className="upload-page__template-section">
-            <TemplateManager onCriteriaChange={handleCriteriaChange} />
+          <div className="upload-page__form-card">
+            <UploadForm
+              onSubmit={handleSubmit}
+              isLoading={isLoading}
+              userRole={user?.role}
+              userName={user?.name}
+              userFirmName={user?.firm_name}
+              firms={firms}
+              firmAdvisors={firmAdvisors}
+              onFirmChange={handleFirmChange}
+              selectedFirmId={selectedFirmId}
+              selectedAdvisorId={selectedAdvisorId}
+              onSelectFirm={setSelectedFirmId}
+              onSelectAdvisor={setSelectedAdvisorId}
+              onCreateFirm={handleCreateFirm}
+              onCreateAdvisor={handleCreateAdvisor}
+            />
           </div>
-        )}
+
+          {isBds && (
+            <div className="upload-page__template-section">
+              <TemplateManager onCriteriaChange={handleCriteriaChange} />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

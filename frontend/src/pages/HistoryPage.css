@@ -133,6 +133,26 @@
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
 }
 
+.history-page__date-input {
+  height: 36px;
+  padding: 0 var(--space-md);
+  background-color: var(--color-surface-elevated);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-md);
+  color: var(--color-on-dark);
+  font-size: 14px;
+  font-family: var(--font-family);
+  min-width: 140px;
+  outline: none;
+  color-scheme: dark;
+  transition: border-color var(--transition-fast);
+}
+
+.history-page__date-input:focus {
+  border-color: var(--color-info);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+}
+
 /* Floating "Ask AI" robot button — fixed below top-nav, mirrors ResultsPage FAB */
 .history-page__fab {
   position: fixed;

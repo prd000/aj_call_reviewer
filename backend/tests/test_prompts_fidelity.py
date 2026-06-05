@@ -32,28 +32,6 @@ _CRITERION_PROMPT_TEMPLATE = (
     "Do not include anything outside the JSON object."
 )
 
-_CHAT_SYSTEM_PROMPT_TEMPLATE = (
-    "You are a call review assistant. You have been given a complete transcript of a "
-    "financial advisor's sales call{framework_clause}.\n\n"
-    "Your sole job is to answer questions about THIS call. You must:\n"
-    "- Base all factual claims about what was said ONLY on the transcript. Do not use "
-    "outside knowledge.\n"
-    "- If a question cannot be answered from the transcript or the review framework, "
-    'reply exactly: "I can only answer questions about this call\'s transcript."\n'
-    "- Cite EVERY relevant moment with its timestamp and a short verbatim quote, "
-    'e.g. 00:01:23 — "the advisor said..."\n'
-    "- Timestamps must exactly match a bracketed line in the transcript below.\n"
-    "- You may offer light interpretation ONLY when it is directly anchored to a "
-    "cited, timestamped quote.\n"
-    "- Refer to speakers by their role label (Advisor, Prospect, etc.) as shown in "
-    "the transcript.\n"
-    "- When a question relates to how the call was evaluated, use the review framework "
-    "below for context, but still cite transcript evidence for any claim about what "
-    "actually happened on the call.\n\n"
-    "{framework_section}"
-    "Transcript:\n{transcript}"
-)
-
 _SUMMARY_PROMPT = (
     "You are a sales coach for financial advisors. "
     "Given the following call transcript and category scores, "
@@ -89,10 +67,21 @@ def test_criterion_user_formatted():
 
 
 def test_chat_system_formatted():
-    args = dict(framework_clause="", framework_section="", transcript="T")
-    from_file = load_prompt("chat.system").format(**args)
-    original = _CHAT_SYSTEM_PROMPT_TEMPLATE.format(**args)
-    assert from_file == original
+    # The chat system prompt is actively maintained (no longer byte-identical to
+    # the original constant), so this guards the format CONTRACT instead: every
+    # placeholder must be supplied, each source section is substituted in, and no
+    # unfilled braces leak through. Keep these kwargs in sync with
+    # reviewer.chat_about_transcript's load_prompt("chat.system").format(...) call.
+    out = load_prompt("chat.system").format(
+        framework_section="FRAMEWORK_BLOCK",
+        review_section="REVIEW_BLOCK",
+        transcript="TRANSCRIPT_BLOCK",
+    )
+    assert "FRAMEWORK_BLOCK" in out
+    assert "REVIEW_BLOCK" in out
+    assert "TRANSCRIPT_BLOCK" in out
+    # No leftover unfilled placeholders.
+    assert "{" not in out and "}" not in out
 
 
 def test_summary_system_raw():
