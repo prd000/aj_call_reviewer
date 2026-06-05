@@ -3,7 +3,7 @@
   top: 64px; /* clears sticky .top-nav */
   right: 0;
   bottom: 0;
-  width: 420px;
+  width: var(--chat-panel-width, 420px);
   background-color: var(--color-surface);
   border-left: 1px solid var(--color-hairline);
   display: flex;
@@ -17,6 +17,25 @@
 .chat-panel--open {
   transform: translateX(0);
   pointer-events: auto;
+}
+
+/* ── Resize handle (left edge) ─────────────────────────────────────────────────── */
+
+.chat-panel__resize-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 6px;
+  margin-left: -3px; /* straddle the border so it's easy to grab */
+  cursor: ew-resize;
+  z-index: 1;
+  background-color: transparent;
+  transition: background-color var(--transition-fast);
+}
+
+.chat-panel__resize-handle:hover {
+  background-color: var(--color-primary-disabled);
 }
 
 /* ── Header ─────────────────────────────────────────────────────────────────── */
@@ -337,5 +356,10 @@
 @media (max-width: 768px) {
   .chat-panel {
     width: 100%;
+  }
+
+  /* Full-width on mobile — nothing to resize. */
+  .chat-panel__resize-handle {
+    display: none;
   }
 }
