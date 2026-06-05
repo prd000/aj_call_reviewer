@@ -182,6 +182,27 @@
   color: var(--color-primary);
 }
 
+/* Multi-select option — checkmark column + label */
+.ss__option--multi {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.ss__check {
+  flex-shrink: 0;
+  width: 14px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--color-primary);
+}
+
+.ss__option-label {
+  flex: 1;
+  min-width: 0;
+}
+
 /* "All" / clear option — shown at the top, visually separated */
 .ss__option--all {
   color: var(--color-muted);

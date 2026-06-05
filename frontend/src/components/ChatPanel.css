@@ -3,7 +3,7 @@
   top: 64px; /* clears sticky .top-nav */
   right: 0;
   bottom: 0;
-  width: 420px;
+  width: var(--chat-panel-width, 420px);
   background-color: var(--color-surface);
   border-left: 1px solid var(--color-hairline);
   display: flex;
@@ -17,6 +17,25 @@
 .chat-panel--open {
   transform: translateX(0);
   pointer-events: auto;
+}
+
+/* ── Resize handle (left edge) ─────────────────────────────────────────────────── */
+
+.chat-panel__resize-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 6px;
+  margin-left: -3px; /* straddle the border so it's easy to grab */
+  cursor: ew-resize;
+  z-index: 1;
+  background-color: transparent;
+  transition: background-color var(--transition-fast);
+}
+
+.chat-panel__resize-handle:hover {
+  background-color: var(--color-primary-disabled);
 }
 
 /* ── Header ─────────────────────────────────────────────────────────────────── */
@@ -229,10 +248,118 @@
   cursor: not-allowed;
 }
 
+/* ── Markdown assistant replies ──────────────────────────────────────────────── */
+
+/* Overrides the bubble's pre-wrap so Markdown block elements render cleanly */
+.chat-panel__bubble .chat-panel__markdown {
+  white-space: normal;
+  word-break: break-word;
+}
+
+.chat-panel__markdown > *:first-child { margin-top: 0; }
+.chat-panel__markdown > *:last-child  { margin-bottom: 0; }
+
+.chat-panel__markdown p,
+.chat-panel__markdown ul,
+.chat-panel__markdown ol,
+.chat-panel__markdown h1,
+.chat-panel__markdown h2,
+.chat-panel__markdown h3,
+.chat-panel__markdown h4,
+.chat-panel__markdown h5,
+.chat-panel__markdown h6,
+.chat-panel__markdown pre,
+.chat-panel__markdown blockquote {
+  margin-top: var(--space-xs);
+  margin-bottom: var(--space-xs);
+}
+
+.chat-panel__markdown h1 { font-size: 16px; font-weight: 700; }
+.chat-panel__markdown h2 { font-size: 15px; font-weight: 700; }
+.chat-panel__markdown h3,
+.chat-panel__markdown h4,
+.chat-panel__markdown h5,
+.chat-panel__markdown h6 { font-size: 13px; font-weight: 700; }
+
+.chat-panel__markdown ul,
+.chat-panel__markdown ol {
+  padding-left: var(--space-md);
+}
+
+.chat-panel__markdown li + li {
+  margin-top: var(--space-xxs);
+}
+
+.chat-panel__markdown code {
+  background-color: var(--color-canvas);
+  border-radius: var(--rounded-xs);
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
+  padding: 1px 4px;
+}
+
+.chat-panel__markdown pre {
+  background-color: var(--color-canvas);
+  border-radius: var(--rounded-md);
+  padding: var(--space-sm);
+  overflow-x: auto;
+}
+
+.chat-panel__markdown pre code {
+  background: none;
+  padding: 0;
+  font-size: 12px;
+}
+
+.chat-panel__markdown a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.chat-panel__markdown a:hover {
+  text-decoration: underline;
+}
+
+.chat-panel__markdown blockquote {
+  border-left: 3px solid var(--color-hairline);
+  padding-left: var(--space-sm);
+  color: var(--color-muted);
+  margin-left: 0;
+}
+
+/* Tables: hairline borders, scrollable when wide */
+.chat-panel__markdown table {
+  border-collapse: collapse;
+  font-size: 12px;
+  width: 100%;
+}
+
+.chat-panel__markdown .chat-panel__table-wrap {
+  overflow-x: auto;
+  margin: var(--space-xs) 0;
+}
+
+.chat-panel__markdown th,
+.chat-panel__markdown td {
+  border: 1px solid var(--color-hairline);
+  padding: var(--space-xxs) var(--space-xs);
+  text-align: left;
+}
+
+.chat-panel__markdown th {
+  font-weight: 700;
+  background-color: var(--color-canvas);
+}
+
 /* ── Responsive ──────────────────────────────────────────────────────────────── */
 
 @media (max-width: 768px) {
   .chat-panel {
     width: 100%;
+  }
+
+  /* Full-width on mobile — nothing to resize. */
+  .chat-panel__resize-handle {
+    display: none;
   }
 }

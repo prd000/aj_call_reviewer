@@ -65,6 +65,7 @@ def _build_triage_table(handle_map: dict[str, dict]) -> str:
         framework = review.get("framework") or {}
 
         advisor = meta.get("advisor_name") or "Unknown"
+        prospect = meta.get("prospect_name") or "—"
         firm = meta.get("firm") or "—"
         date = _format_date(review.get("created_at"))
         outcome = meta.get("call_outcome") or "—"
@@ -88,7 +89,7 @@ def _build_triage_table(handle_map: dict[str, dict]) -> str:
             n_scores_only += 1
 
         lines.append(
-            f"{handle} | {advisor} | {firm} | {date} | Outcome: {outcome} | Template: {template}\n"
+            f"{handle} | {advisor} | Prospect: {prospect} | {firm} | {date} | Outcome: {outcome} | Template: {template}\n"
             f"  Overall: {overall} | {scores}\n"
             f"{summary_line}"
         )

@@ -1,31 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
+import MarkdownMessage from './MarkdownMessage'
 import './ChatPanel.css'
 
 const MAX_ATTEMPTS = 3
 const BACKOFF_MS = [600, 1500]
 
-function renderWithTimestamps(text, onTimestampClick) {
-  // Regex must be constructed inside the function to avoid stale lastIndex.
-  const RE = /\b(\d{2}:\d{2}:\d{2})\b/g
-  const parts = []
-  let last = 0
-  let match
-  while ((match = RE.exec(text)) !== null) {
-    if (match.index > last) parts.push(text.slice(last, match.index))
-    const ts = match[1]
-    parts.push(
-      <button
-        key={match.index}
-        className="chat-panel__ts"
-        onClick={() => onTimestampClick(ts)}
-      >
-        {ts}
-      </button>,
-    )
-    last = RE.lastIndex
-  }
-  if (last < text.length) parts.push(text.slice(last))
-  return parts
+// Drag-to-resize bounds for the panel width (px).
+const MIN_WIDTH = 320
+const MAX_WIDTH = 760
+const DEFAULT_WIDTH = 420
+const WIDTH_STORAGE_KEY = 'chatPanelWidth'
+
+function clampWidth(w) {
+  return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, w))
 }
 
 export default function ChatPanel({
@@ -45,6 +32,47 @@ export default function ChatPanel({
   const [input, setInput] = useState('')
   const bottomRef = useRef(null)
   const textareaRef = useRef(null)
+
+  // Drag-to-resize width (persisted across sessions).
+  const [width, setWidth] = useState(() => {
+    const saved = Number(localStorage.getItem(WIDTH_STORAGE_KEY))
+    return saved ? clampWidth(saved) : DEFAULT_WIDTH
+  })
+  const widthRef = useRef(width)
+  const isResizingRef = useRef(false)
+
+  useEffect(() => {
+    widthRef.current = width
+  }, [width])
+
+  // Drag the left edge to resize. Width grows as the cursor moves left
+  // (panel is docked to the right), clamped to [MIN_WIDTH, MAX_WIDTH].
+  useEffect(() => {
+    function onMove(e) {
+      if (!isResizingRef.current) return
+      setWidth(clampWidth(window.innerWidth - e.clientX))
+    }
+    function onUp() {
+      if (!isResizingRef.current) return
+      isResizingRef.current = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      localStorage.setItem(WIDTH_STORAGE_KEY, String(widthRef.current))
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [])
+
+  function startResize(e) {
+    e.preventDefault()
+    isResizingRef.current = true
+    document.body.style.cursor = 'ew-resize'
+    document.body.style.userSelect = 'none'
+  }
 
   // Auto-scroll to bottom when messages change or status changes.
   useEffect(() => {
@@ -115,7 +143,18 @@ export default function ChatPanel({
   const isBusy = status === 'sending' || status === 'retrying'
 
   return (
-    <div className={`chat-panel${isOpen ? ' chat-panel--open' : ''}`} aria-hidden={!isOpen}>
+    <div
+      className={`chat-panel${isOpen ? ' chat-panel--open' : ''}`}
+      style={{ '--chat-panel-width': `${width}px` }}
+      aria-hidden={!isOpen}
+    >
+      <div
+        className="chat-panel__resize-handle"
+        onMouseDown={startResize}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Drag to resize chat panel"
+      />
       <div className="chat-panel__header">
         <div className="chat-panel__header-text">
           <span className="chat-panel__title">{title}</span>
@@ -136,8 +175,8 @@ export default function ChatPanel({
             key={i}
             className={`chat-panel__bubble chat-panel__bubble--${msg.role}`}
           >
-            {msg.role === 'assistant' && onTimestampClick
-              ? renderWithTimestamps(msg.content, onTimestampClick)
+            {msg.role === 'assistant'
+              ? <MarkdownMessage content={msg.content} onTimestampClick={onTimestampClick} />
               : msg.content}
           </div>
         ))}

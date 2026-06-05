@@ -114,19 +114,57 @@ def _format_framework(framework: dict | None) -> str:
     return "\n".join(lines) + "\n\n"
 
 
+def _format_review_results(review_results: dict | None) -> str:
+    """
+    Render the official review (the scores + written feedback this call received)
+    as a readable block for the chat system prompt. Returns "" when no review is
+    available (e.g. a call still processing, or a legacy record), so the prompt
+    section is simply omitted.
+    """
+    if not review_results:
+        return ""
+    categories = review_results.get("categories") or []
+    summary = (review_results.get("summary") or "").strip()
+    if not categories and not summary:
+        return ""
+
+    lines = []
+    if summary:
+        lines.append(f"Overall summary: {summary}")
+        lines.append("")
+    if categories:
+        lines.append("Scores and feedback by criterion:")
+        for c in categories:
+            name = c.get("name", "")
+            score = c.get("score")
+            max_score = c.get("max_score", 10)
+            feedback = (c.get("feedback") or "").strip()
+            if score is not None:
+                lines.append(f"- {name}: {score}/{max_score}")
+            else:
+                lines.append(f"- {name}:")
+            if feedback:
+                lines.append(f"  {feedback}")
+    return "\n".join(lines) + "\n\n"
+
+
 def chat_about_transcript(
     transcript: list[dict],
     speaker_map: dict,
     messages: list[dict],
     framework: dict | None = None,
+    review_results: dict | None = None,
 ) -> str:
     """
     Respond to a user question grounded strictly in the given transcript, with the
-    review framework available as evaluation context.
+    review framework and this call's official review (scores + feedback) available
+    as additional sources.
 
     messages: [{"role": "user"|"assistant", "content": str}, ...], last entry is the new user turn.
     framework: the review framework snapshot (template_name + criteria) the call was scored
         against; optional (omitted from the prompt when absent).
+    review_results: the call's generated review ({"summary", "categories": [...]}); optional
+        (omitted from the prompt when absent — e.g. a call still processing or a legacy record).
     Raises LLMUnavailableError if no API key is configured.
     """
     if not get_llm_api_key():
@@ -134,14 +172,10 @@ def chat_about_transcript(
 
     transcript_text = _format_transcript_labeled(transcript, speaker_map)
     framework_section = _format_framework(framework)
-    framework_clause = (
-        ", along with the review framework it was evaluated against"
-        if framework_section
-        else ""
-    )
+    review_section = _format_review_results(review_results)
     system_prompt = load_prompt("chat.system").format(
-        framework_clause=framework_clause,
         framework_section=framework_section,
+        review_section=review_section,
         transcript=transcript_text,
     )
 
