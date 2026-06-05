@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import ReviewResults from '../components/ReviewResults'
 import ChatPanel from '../components/ChatPanel'
 import { useLoadingWatchdog } from '../hooks/useLoadingWatchdog'
-import { getReview, updateReviewOutcome } from '../services/api'
+import { chatAboutReview, getReview, updateReviewOutcome } from '../services/api'
 import './ResultsPage.css'
 
 function RobotIcon() {
@@ -151,7 +151,7 @@ export default function ResultsPage() {
             <RobotIcon />
           </button>
           <ChatPanel
-            reviewId={id}
+            onSend={(msgs) => chatAboutReview(id, msgs)}
             messages={chatMessages}
             setMessages={setChatMessages}
             isOpen={isChatOpen}

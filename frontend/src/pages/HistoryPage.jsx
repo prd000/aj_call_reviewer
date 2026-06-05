@@ -1,13 +1,38 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import ChatPanel from '../components/ChatPanel'
 import ReviewList from '../components/ReviewList'
 import SearchableSelect from '../components/SearchableSelect'
 import { useAuth } from '../context/AuthContext'
 import { useLoadingWatchdog } from '../hooks/useLoadingWatchdog'
-import { deleteReview, listFirms, listReviews } from '../services/api'
-import { OUTCOME_FILTER_OPTIONS } from '../lib/outcomes'
+import { NO_OUTCOME, OUTCOME_FILTER_OPTIONS } from '../lib/outcomes'
+import { chatOverHistory, deleteReview, listFirms, listReviews } from '../services/api'
 import './HistoryPage.css'
 
 const IN_PROGRESS_STATUSES = ['pending', 'transcribing', 'reviewing']
+
+function RobotIcon() {
+  return (
+    <svg
+      width="28"
+      height="28"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="4" y="8" width="16" height="11" rx="2.5" />
+      <path d="M12 4v4" />
+      <circle cx="12" cy="3" r="1.2" fill="currentColor" stroke="none" />
+      <path d="M4 12.5H2.5M20 12.5h1.5" />
+      <circle cx="9" cy="13" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="13" r="1.3" fill="currentColor" stroke="none" />
+      <path d="M9.5 16h5" />
+    </svg>
+  )
+}
 
 export default function HistoryPage() {
   const { user } = useAuth()
@@ -25,6 +50,10 @@ export default function HistoryPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [firms, setFirms] = useState([])
   const pollingRef = useRef(null)
+
+  // History chat state
+  const [isHistoryChatOpen, setIsHistoryChatOpen] = useState(false)
+  const [historyChatMessages, setHistoryChatMessages] = useState([])
 
   // For BDS reps: firm options come from the API so all firms appear even with no reviews yet
   const firmOptions = useMemo(() => {
@@ -49,6 +78,36 @@ export default function HistoryPage() {
     const reps = reviews.map((r) => r.metadata?.bds_rep_name).filter(Boolean)
     return [...new Set(reps)].sort()
   }, [isBds, reviews])
+
+  // Lift filtering here so we can derive visibleIds for the history chat.
+  const visibleReviews = useMemo(() => {
+    return reviews.filter((r) => {
+      if (filterFirm && r.metadata?.firm !== filterFirm) return false
+      if (filterAdvisor && r.metadata?.advisor_name !== filterAdvisor) return false
+      if (filterTemplate && r.metadata?.template_name !== filterTemplate) return false
+      if (filterBdsRep && r.metadata?.bds_rep_name !== filterBdsRep) return false
+      if (filterOutcome === NO_OUTCOME) {
+        if (r.metadata?.call_outcome) return false
+      } else if (filterOutcome && r.metadata?.call_outcome !== filterOutcome) {
+        return false
+      }
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase()
+        const searchable = [
+          r.metadata?.advisor_name,
+          r.metadata?.firm,
+          r.metadata?.prospect_name,
+          r.metadata?.call_outcome,
+          r.metadata?.template_name,
+          r.metadata?.bds_rep_name,
+        ].filter(Boolean).join(' ').toLowerCase()
+        if (!searchable.includes(q)) return false
+      }
+      return true
+    })
+  }, [reviews, filterFirm, filterAdvisor, filterTemplate, filterBdsRep, filterOutcome, searchQuery])
+
+  const visibleIds = useMemo(() => visibleReviews.map((r) => r.id), [visibleReviews])
 
   async function handleDelete(id) {
     await deleteReview(id)
@@ -106,6 +165,8 @@ export default function HistoryPage() {
       }
     }
   }, [isBds])
+
+  const chatSubtitle = `Asking about ${visibleIds.length} call${visibleIds.length === 1 ? '' : 's'} matching your filters`
 
   return (
     <div className="history-page">
@@ -243,17 +304,37 @@ export default function HistoryPage() {
 
         {!isLoading && !error && (
           <ReviewList
-            reviews={reviews}
-            filterFirm={filterFirm}
-            filterAdvisor={filterAdvisor}
-            filterTemplate={filterTemplate}
-            filterBdsRep={filterBdsRep}
-            filterOutcome={filterOutcome}
-            searchQuery={searchQuery}
+            reviews={visibleReviews}
+            hasAnyReviews={reviews.length > 0}
             onDelete={handleDelete}
           />
         )}
       </div>
+
+      {!isLoading && !error && (
+        <>
+          <button
+            className={`history-page__fab${isHistoryChatOpen ? ' history-page__fab--hidden' : ''}`}
+            onClick={() => setIsHistoryChatOpen(true)}
+            disabled={visibleIds.length === 0}
+            title={visibleIds.length > 0 ? 'Ask AI about these calls' : 'No calls to analyze'}
+            aria-label="Ask AI about visible calls"
+          >
+            <RobotIcon />
+          </button>
+          <ChatPanel
+            title="History Analysis"
+            subtitle={chatSubtitle}
+            onSend={(msgs) => chatOverHistory(visibleIds, msgs)}
+            messages={historyChatMessages}
+            setMessages={setHistoryChatMessages}
+            isOpen={isHistoryChatOpen}
+            onClose={() => setIsHistoryChatOpen(false)}
+            emptyStateText="Ask anything about the calls matching your current filters."
+            inputPlaceholder="Ask about patterns across these calls…"
+          />
+        </>
+      )}
     </div>
   )
 }

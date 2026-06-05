@@ -30,10 +30,25 @@
   flex-shrink: 0;
 }
 
+.chat-panel__header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
 .chat-panel__title {
   font-size: 14px;
   font-weight: 600;
   color: var(--color-on-dark);
+}
+
+.chat-panel__subtitle {
+  font-size: 11px;
+  color: var(--color-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .chat-panel__close {

@@ -7,6 +7,7 @@ const BASE_URL = `${import.meta.env.VITE_API_URL ?? ''}/api`
 const REQUEST_TIMEOUT_MS = 15_000
 const UPLOAD_TIMEOUT_MS = 60_000
 const CHAT_TIMEOUT_MS = 30_000
+const CHAT_AGENT_TIMEOUT_MS = 90_000
 
 export class NoSessionError extends Error {
   constructor() {
@@ -123,6 +124,16 @@ export async function chatAboutReview(id, messages) {
     `${BASE_URL}/reviews/${id}/chat`,
     { method: 'POST', headers, body: JSON.stringify({ messages }) },
     CHAT_TIMEOUT_MS,
+  )
+  return handleResponse(response)
+}
+
+export async function chatOverHistory(reviewIds, messages) {
+  const headers = { ...(await authHeaders()), 'Content-Type': 'application/json' }
+  const response = await apiFetch(
+    `${BASE_URL}/reviews/history-chat`,
+    { method: 'POST', headers, body: JSON.stringify({ review_ids: reviewIds, messages }) },
+    CHAT_AGENT_TIMEOUT_MS,
   )
   return handleResponse(response)
 }

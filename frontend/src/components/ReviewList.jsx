@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { NO_OUTCOME, outcomeColorClass } from '../lib/outcomes'
+import { outcomeColorClass } from '../lib/outcomes'
 import './ReviewList.css'
 
 const IN_PROGRESS_STATUSES = ['pending', 'transcribing', 'reviewing']
@@ -168,48 +168,16 @@ function ReviewListItem({ review, onClick, onDelete }) {
   )
 }
 
-export default function ReviewList({
-  reviews,
-  filterFirm,
-  filterAdvisor,
-  filterTemplate,
-  filterBdsRep,
-  filterOutcome,
-  searchQuery,
-  onDelete,
-}) {
+// reviews: pre-filtered list from HistoryPage (sorted here)
+// hasAnyReviews: whether any reviews exist in the DB at all (for the empty-state copy)
+export default function ReviewList({ reviews, hasAnyReviews, onDelete }) {
   const navigate = useNavigate()
 
-  const filtered = reviews.filter((r) => {
-    if (filterFirm && r.metadata?.firm !== filterFirm) return false
-    if (filterAdvisor && r.metadata?.advisor_name !== filterAdvisor) return false
-    if (filterTemplate && r.metadata?.template_name !== filterTemplate) return false
-    if (filterBdsRep && r.metadata?.bds_rep_name !== filterBdsRep) return false
-    if (filterOutcome === NO_OUTCOME) {
-      if (r.metadata?.call_outcome) return false
-    } else if (filterOutcome && r.metadata?.call_outcome !== filterOutcome) {
-      return false
-    }
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase()
-      const searchable = [
-        r.metadata?.advisor_name,
-        r.metadata?.firm,
-        r.metadata?.prospect_name,
-        r.metadata?.call_outcome,
-        r.metadata?.template_name,
-        r.metadata?.bds_rep_name,
-      ].filter(Boolean).join(' ').toLowerCase()
-      if (!searchable.includes(q)) return false
-    }
-    return true
-  })
-
-  const sorted = [...filtered].sort(
+  const sorted = [...(reviews || [])].sort(
     (a, b) => new Date(b.created_at) - new Date(a.created_at)
   )
 
-  if (!reviews || reviews.length === 0) {
+  if (!hasAnyReviews) {
     return (
       <div className="review-list__empty">
         <p className="review-list__empty-title">No reviews yet</p>
