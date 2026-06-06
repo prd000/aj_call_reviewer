@@ -113,6 +113,9 @@ function ReviewListItem({ review, onClick, onDelete }) {
         <div className="review-list-item__secondary">
           <span className="review-list-item__prospect">Prospect: {metadata?.prospect_name || '—'}</span>
           <span className="review-list-item__date">{formatDate(created_at)}</span>
+          {metadata?.uploaded_by_name && (
+            <span className="review-list-item__uploader">Uploaded by {metadata.uploaded_by_name}</span>
+          )}
           <OutcomePill outcome={metadata?.call_outcome} />
         </div>
       </div>
