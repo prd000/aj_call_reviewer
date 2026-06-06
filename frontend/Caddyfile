@@ -1,0 +1,38 @@
+# Custom Caddyfile — overrides Railpack's default static-serving config.
+#
+# Why this exists: Railpack's default Caddyfile serves dist/ with NO
+# Cache-Control header. With no freshness directive, browsers fall back to
+# heuristic caching (RFC 9111 §4.2.2) on index.html, so after a deploy users
+# keep getting the OLD index.html (pointing at old hashed bundles) on normal
+# navigations until the heuristic window expires or they hard-reload. The fix:
+# tell the browser to always revalidate the HTML entry point, while letting the
+# content-hashed assets cache forever (their filename changes every build).
+
+{
+	admin off
+	auto_https off
+	persist_config off
+}
+
+:{$PORT:80} {
+	root * dist
+	encode gzip zstd
+
+	# Preserve the hardening header Railpack's default config sets.
+	header X-Content-Type-Options nosniff
+
+	# Content-hashed build assets (assets/index-<hash>.js, .css, fonts, etc.).
+	# Filename changes every build, so these are safe to cache forever.
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+
+	# Everything else — the HTML entry point and all SPA fallback routes
+	# (e.g. /history, /results/:id) that resolve to index.html. Force a
+	# revalidation on every load so a new deploy is picked up immediately.
+	@html not path /assets/*
+	header @html Cache-Control "no-cache"
+
+	# SPA routing: serve index.html for any path that isn't a real file.
+	try_files {path} /index.html
+	file_server
+}
