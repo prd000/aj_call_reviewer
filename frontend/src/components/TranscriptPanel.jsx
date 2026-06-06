@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useRef, useState } from 'react'
+import { forwardRef, useImperativeHandle, useRef, useState, useCallback } from 'react'
 import './TranscriptPanel.css'
 
 function resolveIndex(transcript, ts) {
@@ -30,7 +30,28 @@ const TranscriptPanel = forwardRef(function TranscriptPanel(
 ) {
   const [isOpen, setIsOpen] = useState(false)
   const [highlightIdx, setHighlightIdx] = useState(null)
+  const [copied, setCopied] = useState(false)
   const segmentRefs = useRef([])
+
+  const handleCopy = useCallback(
+    (e) => {
+      e.stopPropagation()
+      const lines = transcript.map((seg) => {
+        const speaker =
+          seg.speaker !== undefined
+            ? (speakerMap[seg.speaker] ?? `Speaker ${seg.speaker + 1}`)
+            : null
+        return speaker
+          ? `[${seg.timestamp}] ${speaker}: ${seg.text}`
+          : `[${seg.timestamp}] ${seg.text}`
+      })
+      navigator.clipboard.writeText(lines.join('\n')).then(() => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      })
+    },
+    [transcript, speakerMap],
+  )
 
   useImperativeHandle(ref, () => ({
     jumpTo(ts) {
@@ -55,22 +76,32 @@ const TranscriptPanel = forwardRef(function TranscriptPanel(
 
   return (
     <div className="transcript-panel">
-      <button
-        className="transcript-panel__toggle"
-        onClick={() => setIsOpen((prev) => !prev)}
-        aria-expanded={isOpen}
-      >
-        <span className="transcript-panel__toggle-label">
-          Full Transcript
-          <span className="transcript-panel__count">({transcript.length} segments)</span>
-        </span>
-        <span
-          className={`transcript-panel__chevron${isOpen ? ' transcript-panel__chevron--open' : ''}`}
-          aria-hidden="true"
+      <div className="transcript-panel__header">
+        <button
+          className="transcript-panel__toggle"
+          onClick={() => setIsOpen((prev) => !prev)}
+          aria-expanded={isOpen}
         >
-          &#8964;
-        </span>
-      </button>
+          <span className="transcript-panel__toggle-label">
+            Full Transcript
+            <span className="transcript-panel__count">({transcript.length} segments)</span>
+          </span>
+          <span
+            className={`transcript-panel__chevron${isOpen ? ' transcript-panel__chevron--open' : ''}`}
+            aria-hidden="true"
+          >
+            &#8964;
+          </span>
+        </button>
+        <button
+          className={`transcript-panel__copy${copied ? ' transcript-panel__copy--copied' : ''}`}
+          onClick={handleCopy}
+          aria-label="Copy transcript to clipboard"
+          title="Copy transcript to clipboard"
+        >
+          {copied ? 'Copied!' : 'Copy'}
+        </button>
+      </div>
 
       {isOpen && (
         <div className="transcript-panel__content" role="region" aria-label="Call transcript">

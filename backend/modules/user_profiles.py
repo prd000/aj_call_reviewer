@@ -17,6 +17,16 @@ async def list_bds_reps() -> list[dict]:
     return result.data
 
 
+async def list_profiles_by_ids(ids: list[str]) -> list[dict]:
+    """Fetch id+name for the given profile ids (any role). Empty list if none."""
+    unique = [i for i in {i for i in ids} if i]
+    if not unique:
+        return []
+    client = await get_client()
+    result = await client.table("profiles").select("id, name").in_("id", unique).execute()
+    return result.data
+
+
 async def get_profile(user_id: str) -> dict | None:
     client = await get_client()
     result = await client.table("profiles").select("*").eq("id", user_id).execute()

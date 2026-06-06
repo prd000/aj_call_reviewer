@@ -17,14 +17,18 @@ from modules.storage import (
     list_reviews,
     update_review_outcome,
 )
-from modules.user_profiles import list_bds_reps
+from modules.user_profiles import list_bds_reps, list_profiles_by_ids
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-def _review_summary(review: dict, firm_rep_map: dict | None = None) -> dict:
+def _review_summary(
+    review: dict,
+    firm_rep_map: dict | None = None,
+    uploader_map: dict | None = None,
+) -> dict:
     overall_score = None
     overall_max_score = None
     categories = review.get("review", {}).get("categories", [])
@@ -38,13 +42,15 @@ def _review_summary(review: dict, firm_rep_map: dict | None = None) -> dict:
 
     # Surface the review template (from the framework snapshot) and the firm's
     # assigned BDS rep alongside the existing advisor/firm/outcome metadata so the
-    # history filters can read them the same way. bds_rep_name is only resolved for
-    # BDS-rep callers (firm_rep_map provided); FA responses omit it.
+    # history filters can read them the same way. bds_rep_name and uploaded_by_name
+    # are only resolved for BDS-rep callers (maps provided); FA responses omit them.
     metadata = dict(review.get("metadata", {}))
     framework = review.get("framework") or {}
     metadata["template_name"] = framework.get("template_name")
     if firm_rep_map is not None:
         metadata["bds_rep_name"] = firm_rep_map.get(review.get("firm_id"))
+    if uploader_map is not None:
+        metadata["uploaded_by_name"] = uploader_map.get(review.get("uploaded_by"))
 
     return {
         "id": review["id"],
@@ -70,6 +76,13 @@ async def _build_firm_bds_rep_map() -> dict:
         for f in firms
         if f.get("bds_rep_id")
     }
+
+
+async def _build_uploader_name_map(reviews: list[dict]) -> dict:
+    """Map uploaded_by (profile id) -> uploader name, for the loaded reviews."""
+    ids = [r.get("uploaded_by") for r in reviews]
+    profiles = await list_profiles_by_ids(ids)
+    return {p["id"]: p.get("name") for p in profiles}
 
 
 class OutcomeBody(BaseModel):
@@ -114,7 +127,8 @@ async def get_reviews(user: dict = Depends(get_current_user)):
 
     all_reviews = await list_reviews()
     firm_rep_map = await _build_firm_bds_rep_map()
-    return [_review_summary(r, firm_rep_map) for r in all_reviews]
+    uploader_map = await _build_uploader_name_map(all_reviews)
+    return [_review_summary(r, firm_rep_map, uploader_map) for r in all_reviews]
 
 
 @router.get("/reviews/{review_id}")

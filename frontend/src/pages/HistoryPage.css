@@ -64,13 +64,128 @@
   flex-shrink: 0;
 }
 
-/* Filters bar */
-.history-page__filters {
+/* Controls: always-visible search + a button that toggles the filter panel */
+.history-page__controls {
+  margin-bottom: var(--space-lg);
+}
+
+.history-page__controls-row {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-md);
-  margin-bottom: var(--space-lg);
+  align-items: center;
+}
+
+.history-page__search-wrap {
+  flex: 1 1 240px;
+  max-width: 420px;
+}
+
+/* "Filters" toggle button — secondary-on-dark, mirrors the page's button language */
+.history-page__filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  height: 36px;
+  padding: 0 var(--space-md);
+  background-color: var(--color-surface-elevated);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-md);
+  color: var(--color-on-dark);
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--font-family);
+  cursor: pointer;
+  outline: none;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.history-page__filter-toggle:hover {
+  border-color: var(--color-muted);
+}
+
+.history-page__filter-toggle--open {
+  border-color: var(--color-primary);
+}
+
+.history-page__filter-toggle:focus-visible {
+  border-color: var(--color-info);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+}
+
+/* Active-filter count badge so applied filters are visible while collapsed */
+.history-page__filter-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--rounded-pill);
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Collapsible panel holding every filter field. Conditionally rendered (not
+   height-animated) so the SearchableSelect dropdowns are never clipped. */
+.history-page__filter-panel {
+  margin-top: var(--space-md);
+  padding: var(--space-lg);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-lg);
+  animation: history-filter-panel-in 140ms ease-out;
+}
+
+@keyframes history-filter-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.history-page__filter-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
   align-items: flex-end;
+}
+
+.history-page__filter-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-hairline);
+}
+
+.history-page__clear-filters {
+  background: transparent;
+  border: none;
+  color: var(--color-muted);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-family);
+  cursor: pointer;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--rounded-md);
+  transition: color var(--transition-fast);
+}
+
+.history-page__clear-filters:hover:not(:disabled) {
+  color: var(--color-on-dark);
+}
+
+.history-page__clear-filters:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .history-page__filter {
@@ -111,6 +226,7 @@
 }
 
 .history-page__search {
+  width: 100%;
   height: 36px;
   padding: 0 var(--space-md);
   background-color: var(--color-surface-elevated);
@@ -119,7 +235,6 @@
   color: var(--color-on-dark);
   font-size: 14px;
   font-family: var(--font-family);
-  min-width: 200px;
   outline: none;
   transition: border-color var(--transition-fast);
 }
