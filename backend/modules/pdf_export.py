@@ -53,11 +53,43 @@ def _hex_to_rgb(hex_color: str) -> tuple:
     return tuple(int(h[i : i + 2], 16) for i in (0, 2, 4))
 
 
+# Common Unicode punctuation -> Latin-1/ASCII equivalents so fpdf2's core
+# Helvetica font renders them as readable text instead of "?".
+_PUNCT_MAP = {
+    "—": "-",    # em dash
+    "–": "-",    # en dash
+    "‒": "-",    # figure dash
+    "―": "-",    # horizontal bar
+    "‘": "'",    # left single quote
+    "’": "'",    # right single quote / apostrophe
+    "‚": "'",    # single low-9 quote
+    "“": '"',    # left double quote
+    "”": '"',    # right double quote
+    "„": '"',    # double low-9 quote
+    "…": "...",  # ellipsis
+    "•": "*",    # bullet
+    " ": " ",    # non-breaking space
+    "​": "",     # zero-width space
+    "→": "->",   # right arrow (occasionally appears in AI text)
+}
+_PUNCT_TABLE = str.maketrans(_PUNCT_MAP)
+
+
 def _t(value) -> str:
-    """Latin-1 safe text for fpdf2 core fonts; replaces unsupported characters."""
+    """Latin-1 safe text for fpdf2 core fonts.
+
+    Transliterates common Unicode punctuation (em/en dashes, curly quotes,
+    ellipsis, bullets) to ASCII so they render correctly instead of "?".
+    Anything still outside Latin-1 is dropped via NFKD then replaced.
+    """
     if value is None:
         return ""
-    return str(value).encode("latin-1", errors="replace").decode("latin-1")
+    text = str(value).translate(_PUNCT_TABLE)
+    # NFKC folds compatibility chars (ligatures, full-width forms) while keeping
+    # accents in their precomposed Latin-1 form (e.g. "é" stays a single char).
+    # Encoding to latin-1 with replace is the final safety net for anything left.
+    text = unicodedata.normalize("NFKC", text)
+    return text.encode("latin-1", errors="replace").decode("latin-1")
 
 
 def _format_date(created_at: str) -> str:

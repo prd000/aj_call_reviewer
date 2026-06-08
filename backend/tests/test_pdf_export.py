@@ -3,7 +3,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from modules.pdf_export import _score_color, render_review_pdf, review_pdf_filename
+from modules.pdf_export import _score_color, _t, render_review_pdf, review_pdf_filename
 
 _FULL_REVIEW = {
     "id": "test-id",
@@ -149,5 +149,38 @@ def test_render_with_major_focus():
 
 def test_render_without_major_focus_degrades_gracefully():
     review = {**_FULL_REVIEW, "major_focus": None}
+    result = render_review_pdf(review)
+    assert result.startswith(b"%PDF")
+
+
+def test_t_transliterates_smart_punctuation():
+    # em dash, en dash, curly single/double quotes, ellipsis, bullet, arrow
+    result = _t("Pacing — early – “strong” it’s… • →")
+    assert "?" not in result
+    assert result == 'Pacing - early - "strong" it\'s... * ->'
+
+
+def test_t_preserves_latin1_accents():
+    result = _t("café ñ ü Ángel")
+    assert "?" not in result
+    assert result == "café ñ ü Ángel"
+
+
+def test_t_handles_none_and_non_str():
+    assert _t(None) == ""
+    assert _t(42) == "42"
+
+
+def test_render_pdf_with_unicode_punctuation_in_content():
+    review = {
+        **_FULL_REVIEW,
+        "review": {
+            "summary": "Strong rapport — but discovery – “needs work”…",
+            "categories": [
+                {"name": "Needs Discovery", "score": 4, "max_score": 10,
+                 "feedback": "Ask more — don’t rush • listen."},
+            ],
+        },
+    }
     result = render_review_pdf(review)
     assert result.startswith(b"%PDF")
