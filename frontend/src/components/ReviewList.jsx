@@ -171,14 +171,12 @@ function ReviewListItem({ review, onClick, onDelete }) {
   )
 }
 
-// reviews: pre-filtered list from HistoryPage (sorted here)
+// reviews: pre-filtered AND pre-sorted list from HistoryPage; rendered in order
 // hasAnyReviews: whether any reviews exist in the DB at all (for the empty-state copy)
 export default function ReviewList({ reviews, hasAnyReviews, onDelete }) {
   const navigate = useNavigate()
 
-  const sorted = [...(reviews || [])].sort(
-    (a, b) => new Date(b.created_at) - new Date(a.created_at)
-  )
+  const ordered = reviews || []
 
   if (!hasAnyReviews) {
     return (
@@ -191,7 +189,7 @@ export default function ReviewList({ reviews, hasAnyReviews, onDelete }) {
     )
   }
 
-  if (sorted.length === 0) {
+  if (ordered.length === 0) {
     return (
       <div className="review-list__empty">
         <p className="review-list__empty-title">No matching reviews</p>
@@ -204,7 +202,7 @@ export default function ReviewList({ reviews, hasAnyReviews, onDelete }) {
 
   return (
     <div className="review-list">
-      {sorted.map((review) => (
+      {ordered.map((review) => (
         <ReviewListItem
           key={review.id}
           review={review}

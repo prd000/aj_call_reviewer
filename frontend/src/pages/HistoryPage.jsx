@@ -10,6 +10,41 @@ import './HistoryPage.css'
 
 const IN_PROGRESS_STATUSES = ['pending', 'transcribing', 'reviewing']
 
+// Sort options for the history list. `overall_score` in the list response is
+// already normalized to a 0–10 scale (overall_max_score is always 10), so it is
+// directly comparable across reviews regardless of their template's max scores.
+const SORT_OPTIONS = [
+  { value: 'date_desc', label: 'Newest first' },
+  { value: 'date_asc', label: 'Oldest first' },
+  { value: 'score_desc', label: 'Highest score' },
+  { value: 'score_asc', label: 'Lowest score' },
+]
+const DEFAULT_SORT = 'date_desc'
+
+// Reviews without a score (in-progress / failed) always sort to the bottom of a
+// score sort, ordered newest-first among themselves, so they never interleave
+// with scored rows.
+function compareReviews(a, b, sortBy) {
+  switch (sortBy) {
+    case 'date_asc':
+      return new Date(a.created_at) - new Date(b.created_at)
+    case 'score_desc':
+    case 'score_asc': {
+      const sa = a.overall_score
+      const sb = b.overall_score
+      const aNull = sa === null || sa === undefined
+      const bNull = sb === null || sb === undefined
+      if (aNull && bNull) return new Date(b.created_at) - new Date(a.created_at)
+      if (aNull) return 1
+      if (bNull) return -1
+      return sortBy === 'score_desc' ? sb - sa : sa - sb
+    }
+    case 'date_desc':
+    default:
+      return new Date(b.created_at) - new Date(a.created_at)
+  }
+}
+
 function RobotIcon() {
   return (
     <svg
@@ -70,6 +105,7 @@ export default function HistoryPage() {
   const [filterDateFrom, setFilterDateFrom] = useState('')
   const [filterDateTo, setFilterDateTo] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
+  const [sortBy, setSortBy] = useState(DEFAULT_SORT)
   const [firms, setFirms] = useState([])
   // The filter fields collapse behind a "Filters" button to keep the bar uncrowded.
   const [isFiltersOpen, setIsFiltersOpen] = useState(false)
@@ -109,9 +145,10 @@ export default function HistoryPage() {
     return [...new Set(names)].sort()
   }, [isBds, reviews])
 
-  // Lift filtering here so we can derive visibleIds for the history chat.
+  // Lift filtering + sorting here so we can derive visibleIds for the history
+  // chat and so ReviewList renders rows in the order it receives them.
   const visibleReviews = useMemo(() => {
-    return reviews.filter((r) => {
+    const filtered = reviews.filter((r) => {
       // Each filter is an OR within itself; an empty array means "no filter".
       if (filterFirm.length && !filterFirm.includes(r.metadata?.firm)) return false
       if (filterAdvisor.length && !filterAdvisor.includes(r.metadata?.advisor_name)) return false
@@ -145,7 +182,8 @@ export default function HistoryPage() {
       }
       return true
     })
-  }, [reviews, filterFirm, filterAdvisor, filterTemplate, filterBdsRep, filterUploader, filterOutcome, filterDateFrom, filterDateTo, searchQuery])
+    return filtered.sort((a, b) => compareReviews(a, b, sortBy))
+  }, [reviews, filterFirm, filterAdvisor, filterTemplate, filterBdsRep, filterUploader, filterOutcome, filterDateFrom, filterDateTo, searchQuery, sortBy])
 
   const visibleIds = useMemo(() => visibleReviews.map((r) => r.id), [visibleReviews])
 
@@ -269,6 +307,20 @@ export default function HistoryPage() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   aria-label="Search reviews"
+                />
+              </div>
+
+              <div className="history-page__sort">
+                <label htmlFor="sort-by" className="history-page__sort-label">
+                  Sort
+                </label>
+                <SearchableSelect
+                  id="sort-by"
+                  size="sm"
+                  options={SORT_OPTIONS}
+                  value={sortBy}
+                  onChange={setSortBy}
+                  placeholder="Sort by"
                 />
               </div>
 
