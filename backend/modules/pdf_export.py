@@ -5,6 +5,28 @@ from datetime import datetime
 from fpdf import FPDF, XPos, YPos
 
 
+# ---------------------------------------------------------------------------
+# Design tokens (light variant of the Binance-inspired system in context/DESIGN.md).
+# The PDF mirrors the in-app call review screen using the light-mode palette so the
+# document stays printer-friendly while matching the screen's layout and accents.
+# ---------------------------------------------------------------------------
+WHITE = (255, 255, 255)            # canvas-light / card surface
+SURFACE_ELEVATED = (245, 245, 245)  # surface-strong-light (#f5f5f5) — nested boxes
+HAIRLINE = (234, 236, 239)          # hairline-on-light (#eaecef) — borders / bar track
+INK = (24, 26, 32)                  # ink / body-on-light (#181a20)
+MUTED = (112, 122, 138)             # muted labels (#707a8a)
+YELLOW = (252, 213, 53)             # primary (#fcd535) — header divider / accents
+
+# Radii (px -> ~mm at fpdf's default mm units) and card padding.
+RADIUS_CARD = 2.5   # rounded-lg (8px)
+RADIUS_XL = 3.5     # rounded-xl (12px) — summary card container
+CARD_PAD = 6.0      # spacing-lg (24px) card padding
+
+# Convenience aliases for the modern fpdf2 cursor-positioning API.
+_NL = {"new_x": XPos.LMARGIN, "new_y": YPos.NEXT}   # move to next line
+_CR = {"new_x": XPos.RIGHT,   "new_y": YPos.TOP}     # stay on same line
+
+
 def _overall_score(categories: list) -> float | None:
     if not categories:
         return None
@@ -46,18 +68,71 @@ def _format_date(created_at: str) -> str:
         return created_at or ""
 
 
-# Convenience aliases for the modern fpdf2 cursor-positioning API.
-_NL = {"new_x": XPos.LMARGIN, "new_y": YPos.NEXT}   # move to next line
-_CR = {"new_x": XPos.RIGHT,   "new_y": YPos.TOP}     # stay on same line
-
-
-def _section_header(pdf: FPDF, title: str) -> None:
-    pdf.set_font("Helvetica", "B", 13)
-    pdf.set_text_color(24, 26, 32)
-    pdf.set_draw_color(234, 236, 239)
-    pdf.cell(0, 8, _t(title), border="B", **_NL)
-    pdf.ln(3)
+# ---------------------------------------------------------------------------
+# Drawing helpers
+# ---------------------------------------------------------------------------
+def _rounded_box(pdf, x, y, w, h, fill_rgb, border_rgb=HAIRLINE, radius=RADIUS_CARD):
+    """Draw a rounded, filled, hairline-bordered rectangle (a card surface)."""
+    pdf.set_fill_color(*fill_rgb)
+    pdf.set_draw_color(*border_rgb)
+    pdf.set_line_width(0.2)
+    pdf.rect(x, y, w, h, style="DF", round_corners=True, corner_radius=radius)
     pdf.set_draw_color(0, 0, 0)
+    pdf.set_line_width(0.2)
+
+
+def _pill_bar(pdf, x, y, w, h, ratio, color_rgb):
+    """Pill-shaped progress bar: gray track + color-coded fill (mirrors ScoreCard)."""
+    radius = h / 2
+    pdf.set_draw_color(*HAIRLINE)
+    pdf.set_fill_color(*HAIRLINE)
+    pdf.rect(x, y, w, h, style="DF", round_corners=True, corner_radius=radius)
+    ratio = max(0.0, min(1.0, ratio))
+    if ratio > 0:
+        fill_w = max(w * ratio, h)  # keep the pill readable for tiny ratios
+        pdf.set_draw_color(*color_rgb)
+        pdf.set_fill_color(*color_rgb)
+        pdf.rect(x, y, fill_w, h, style="DF", round_corners=True, corner_radius=radius)
+    pdf.set_draw_color(0, 0, 0)
+
+
+def _draw_card(pdf, content_fn, *, pad=CARD_PAD, radius=RADIUS_CARD, fill=WHITE):
+    """
+    Render a card whose height is unknown until its content is laid out.
+
+    Measures `content_fn` via offset_rendering, paginates so the card never splits
+    across pages, draws the rounded background box, then renders the content on top.
+    `content_fn(pdf, x, w)` lays out content top-down from the current cursor.
+    """
+    pw = pdf.w - pdf.l_margin - pdf.r_margin
+    x = pdf.l_margin
+    inner_x = x + pad
+    inner_w = pw - 2 * pad
+
+    prev_apb = pdf.auto_page_break
+    pdf.set_auto_page_break(False)
+
+    start_y = pdf.get_y()
+    with pdf.offset_rendering() as rec:
+        rec.set_xy(inner_x, start_y + pad)
+        content_fn(rec, inner_x, inner_w)
+        content_h = rec.get_y() - (start_y + pad)
+    card_h = content_h + 2 * pad
+
+    # Page-break before the card if it would overflow the page.
+    if start_y + card_h > pdf.h - pdf.b_margin:
+        pdf.set_auto_page_break(prev_apb)
+        pdf.add_page()
+        pdf.set_auto_page_break(False)
+        start_y = pdf.get_y()
+
+    _rounded_box(pdf, x, start_y, pw, card_h, fill, HAIRLINE, radius)
+
+    pdf.set_xy(inner_x, start_y + pad)
+    content_fn(pdf, inner_x, inner_w)
+
+    pdf.set_xy(pdf.l_margin, start_y + card_h)
+    pdf.set_auto_page_break(prev_apb)
 
 
 def render_review_pdf(review: dict) -> bytes:
@@ -77,14 +152,14 @@ def render_review_pdf(review: dict) -> bytes:
 
     # --- HEADER ---
     pdf.set_font("Helvetica", "B", 22)
-    pdf.set_text_color(24, 26, 32)
+    pdf.set_text_color(*INK)
     pdf.cell(0, 10, "Call Review", **_NL)
     # Yellow divider line
-    pdf.set_fill_color(252, 213, 53)
+    pdf.set_fill_color(*YELLOW)
     pdf.rect(pdf.l_margin, pdf.get_y(), pw, 2, "F")
-    pdf.ln(6)
+    pdf.ln(8)
 
-    # Metadata rows
+    # --- SUMMARY CARD (metadata + overall score + summary) ---
     meta_rows = []
     if metadata.get("advisor_name"):
         meta_rows.append(("Advisor", metadata["advisor_name"]))
@@ -97,39 +172,65 @@ def render_review_pdf(review: dict) -> bytes:
     if metadata.get("call_outcome"):
         meta_rows.append(("Outcome", metadata["call_outcome"]))
 
-    lw = 32  # label column width
-    for label, value in meta_rows:
-        pdf.set_font("Helvetica", "B", 11)
-        pdf.set_text_color(112, 122, 138)
-        pdf.cell(lw, 6, _t(label), **_CR)
-        pdf.set_font("Helvetica", "", 11)
-        pdf.set_text_color(24, 26, 32)
-        pdf.cell(pw - lw, 6, _t(value), **_NL)
+    def _summary_card(p, x, w):
+        # Metadata: 2-column grid, label (muted uppercase) above value (ink).
+        col_gap = 6.0
+        col_w = (w - col_gap) / 2
+        for i in range(0, len(meta_rows), 2):
+            row_y = p.get_y()
+            for j in (0, 1):
+                idx = i + j
+                if idx >= len(meta_rows):
+                    break
+                label, value = meta_rows[idx]
+                cx = x + j * (col_w + col_gap)
+                p.set_xy(cx, row_y)
+                p.set_font("Helvetica", "B", 8)
+                p.set_text_color(*MUTED)
+                p.cell(col_w, 4, _t(label.upper()))
+                p.set_xy(cx, row_y + 4)
+                p.set_font("Helvetica", "", 11)
+                p.set_text_color(*INK)
+                p.cell(col_w, 5, _t(value))
+            p.set_xy(x, row_y + 4 + 5 + 5)  # label + value + row gap
 
-    pdf.ln(8)
+        # Overall score: elevated box, muted label left + big color-coded number right.
+        if overall is not None:
+            box_h = 16.0
+            box_y = p.get_y()
+            _rounded_box(p, x, box_y, w, box_h, SURFACE_ELEVATED, SURFACE_ELEVATED, RADIUS_CARD)
+            p.set_xy(x + 4, box_y)
+            p.set_font("Helvetica", "B", 9)
+            p.set_text_color(*MUTED)
+            p.cell(w / 2, box_h, "OVERALL SCORE")
+            r, g, b = _hex_to_rgb(_score_color(overall / 10))
+            p.set_xy(x, box_y)
+            p.set_font("Helvetica", "B", 26)
+            p.set_text_color(r, g, b)
+            p.cell(w - 4, box_h, f"{overall}/10", align="R")
+            p.set_xy(x, box_y + box_h + 6)
 
-    # --- OVERALL SCORE ---
-    if overall is not None:
-        r, g, b = _hex_to_rgb(_score_color(overall / 10))
-        pdf.set_font("Helvetica", "", 9)
-        pdf.set_text_color(112, 122, 138)
-        pdf.cell(0, 6, "OVERALL SCORE", align="C", **_NL)
-        pdf.set_font("Helvetica", "B", 36)
-        pdf.set_text_color(r, g, b)
-        pdf.cell(0, 18, f"{overall}/10", align="C", **_NL)
-        pdf.ln(6)
+        # Summary text.
+        if summary:
+            p.set_x(x)
+            p.set_font("Helvetica", "B", 8)
+            p.set_text_color(*MUTED)
+            p.cell(w, 4, "SUMMARY", **_NL)
+            p.set_x(x)
+            p.set_font("Helvetica", "", 11)
+            p.set_text_color(*INK)
+            p.multi_cell(w, 5, _t(summary), align="L", **_NL)
 
-    # --- SUMMARY ---
-    if summary:
-        _section_header(pdf, "Summary")
-        pdf.set_font("Helvetica", "", 12)
-        pdf.set_text_color(24, 26, 32)
-        pdf.multi_cell(0, 5, _t(summary))
+    if meta_rows or overall is not None or summary:
+        _draw_card(pdf, _summary_card, radius=RADIUS_XL)
         pdf.ln(6)
 
     # --- CATEGORY SCORES ---
     if categories:
-        _section_header(pdf, "Category Scores")
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.set_text_color(*INK)
+        pdf.cell(0, 8, "Category Scores", **_NL)
+        pdf.ln(2)
 
         for i, cat in enumerate(categories):
             if i < len(framework_criteria):
@@ -140,46 +241,52 @@ def render_review_pdf(review: dict) -> bytes:
             score = cat.get("score")
             max_score = cat.get("max_score", 10)
             feedback = cat.get("feedback", "")
-
-            # Title
-            pdf.set_font("Helvetica", "B", 12)
-            pdf.set_text_color(24, 26, 32)
-            pdf.multi_cell(0, 6, _t(title))
-
-            # Score label
             score_display = f"{score}/{max_score}" if score is not None else "N/A"
-            pdf.set_font("Helvetica", "", 11)
-            pdf.set_text_color(112, 122, 138)
-            pdf.cell(0, 5, _t(score_display), **_NL)
-            pdf.ln(1)
+            ratio = (score / max_score) if (score is not None and max_score) else None
 
-            # Score bar
-            if score is not None and max_score:
-                ratio = max(0.0, min(1.0, score / max_score))
-                br, bg, bb = _hex_to_rgb(_score_color(ratio))
-                bar_y = pdf.get_y()
-                # Gray track
-                pdf.set_fill_color(234, 236, 239)
-                pdf.rect(pdf.l_margin, bar_y, pw, 5, "F")
-                # Colored fill
-                if ratio > 0:
-                    pdf.set_fill_color(br, bg, bb)
-                    pdf.rect(pdf.l_margin, bar_y, pw * ratio, 5, "F")
-                pdf.ln(7)
+            def _score_card(p, x, w, title=title, score=score, feedback=feedback,
+                            score_display=score_display, ratio=ratio):
+                # Header row: name (left) + color-coded score badge (right).
+                row_y = p.get_y()
+                p.set_font("Helvetica", "B", 16)
+                badge_w = p.get_string_width(_t(score_display)) + 1
+                name_w = w - badge_w - 3
+                p.set_xy(x, row_y)
+                p.set_font("Helvetica", "B", 11)
+                p.set_text_color(*INK)
+                name_h = p.multi_cell(name_w, 5, _t(title), align="L", dry_run=True, output="HEIGHT")
+                row_h = max(name_h, 6.5)
+                p.set_xy(x, row_y)
+                p.multi_cell(name_w, 5, _t(title), align="L", new_x=XPos.LMARGIN, new_y=YPos.TOP)
+                if ratio is not None:
+                    r, g, b = _hex_to_rgb(_score_color(ratio))
+                else:
+                    r, g, b = MUTED
+                p.set_xy(x + w - badge_w, row_y)
+                p.set_font("Helvetica", "B", 16)
+                p.set_text_color(r, g, b)
+                p.cell(badge_w, 6.5, _t(score_display), align="R")
+                p.set_xy(x, row_y + row_h + 2.5)
 
-            # Feedback
-            if feedback:
-                pdf.set_font("Helvetica", "", 11)
-                pdf.set_text_color(24, 26, 32)
-                pdf.multi_cell(0, 5, _t(feedback))
+                # Pill progress bar.
+                if ratio is not None:
+                    bar_y = p.get_y()
+                    p.set_xy(x, bar_y)
+                    _pill_bar(p, x, bar_y, w, 1.6, ratio, (r, g, b))
+                    p.set_xy(x, bar_y + 1.6 + 3)
 
-            pdf.ln(6)
-            # Hairline separator between categories
-            if i < len(categories) - 1:
-                pdf.set_draw_color(230, 230, 230)
-                y_line = pdf.get_y() - 3
-                pdf.line(pdf.l_margin, y_line, pdf.l_margin + pw, y_line)
-                pdf.set_draw_color(0, 0, 0)
+                # Feedback.
+                if feedback:
+                    p.set_x(x)
+                    p.set_font("Helvetica", "", 10)
+                    p.set_text_color(*INK)
+                    p.multi_cell(w, 4.5, _t(feedback), align="L", **_NL)
+                else:
+                    # trim trailing gap when there's no feedback
+                    p.set_xy(x, p.get_y() - 1)
+
+            _draw_card(pdf, _score_card, pad=5.0)
+            pdf.ln(4)
 
     return bytes(pdf.output())
 
