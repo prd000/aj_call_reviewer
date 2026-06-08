@@ -111,14 +111,43 @@ async def update_review_status(
     *,
     error_message: str | None = None,
     celery_task_id: str | None = None,
+    guard_terminal: bool = False,
 ) -> None:
-    """Partial update of a review's status and optional fields."""
+    """Partial update of a review's status and optional fields.
+
+    When ``guard_terminal`` is True the write becomes a no-op for rows already in
+    the terminal ``"complete"`` state (via a ``status != "complete"`` filter),
+    preventing a stray retry/redelivery from regressing a finished review back to
+    ``"transcribing"``/``"reviewing"``. Default False preserves unconditional
+    writes for callers that must always apply — the ``"failed"`` cleanup write
+    (tasks.py) and the initial ``"pending"`` write (upload.py).
+    """
     client = await get_client()
     patch: dict = {"status": status}
     if error_message is not None:
         patch["error_message"] = error_message
     if celery_task_id is not None:
         patch["celery_task_id"] = celery_task_id
+    query = client.table("reviews").update(patch).eq("id", review_id)
+    if guard_terminal:
+        query = query.neq("status", "complete")
+    await query.execute()
+
+
+async def update_review_transcript(
+    review_id: str,
+    transcript: list[dict],
+    speaker_map: dict,
+) -> None:
+    """Persist just the transcript + speaker_map as a mid-pipeline checkpoint.
+
+    Written immediately after transcription succeeds (and BEFORE the status flips
+    to ``"reviewing"``) so a retry that later fails during the review phase can
+    resume from this persisted transcript instead of re-submitting a new Rev.ai
+    job. Writes only these two columns; never touches status.
+    """
+    client = await get_client()
+    patch = {"transcript": transcript, "speaker_map": speaker_map}
     await client.table("reviews").update(patch).eq("id", review_id).execute()
 
 

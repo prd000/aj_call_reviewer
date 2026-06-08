@@ -22,31 +22,57 @@ def process_review_task(self, review_id: str, template_id: str):
         template = await get_template(template_id)
         criteria = template["criteria"]
 
-        await storage.update_review_status(review_id, "transcribing")
+        # Fetch the review BEFORE any status write so the idempotency guard and
+        # the checkpoint/resume decision can run without first regressing status.
         review = await storage.get_review(review_id)
         if not review:
             logger.error("Review %s not found in database — marking failed, no retry", review_id)
             await storage.update_review_status(review_id, "failed", error_message="Review record not found in database")
             return
-        if not review.get("storage_path"):
-            logger.error("Review %s has no storage_path — marking failed, no retry", review_id)
-            await storage.update_review_status(review_id, "failed", error_message="No storage path for recording")
+
+        # Idempotency guard: never reprocess a finished review. Protects against a
+        # duplicate/late delivery or a retry that fires after a successful complete.
+        if review.get("status") == "complete":
+            logger.info("Review %s already complete — idempotent no-op (retry %s)", review_id, self.request.retries)
             return
-        signed_url = await storage.get_recording_signed_url(review["storage_path"])
 
-        logger.info("Starting transcription for review %s", review_id)
-        transcript = transcriber.transcribe(signed_url)
-        speaker_map = reviewer.identify_speakers(transcript)
-        logger.info("Transcription complete for review %s (%d segments)", review_id, len(transcript))
+        # Checkpoint/resume decision. Gate on transcript only — an empty speaker_map
+        # ({}) is legitimate (e.g. <2 speakers) and must NOT force a re-transcribe.
+        existing_transcript = review.get("transcript")
+        if existing_transcript:
+            transcript = existing_transcript
+            speaker_map = review.get("speaker_map") or {}
+            logger.info(
+                "Review %s resuming from persisted transcript (%d segments) — skipping Rev.ai (retry %s)",
+                review_id, len(transcript), self.request.retries,
+            )
+        else:
+            await storage.update_review_status(review_id, "transcribing", guard_terminal=True)
+            if not review.get("storage_path"):
+                logger.error("Review %s has no storage_path — marking failed, no retry", review_id)
+                await storage.update_review_status(review_id, "failed", error_message="No storage path for recording")
+                return
+            # Signed URL fetched lazily here so the resume path never references a
+            # recording that a prior attempt may already have deleted.
+            signed_url = await storage.get_recording_signed_url(review["storage_path"])
+            logger.info("Starting transcription for review %s", review_id)
+            transcript = transcriber.transcribe(signed_url)
+            speaker_map = {str(k): v for k, v in reviewer.identify_speakers(transcript).items()}
+            logger.info("Transcription complete for review %s (%d segments)", review_id, len(transcript))
+            # CHECKPOINT — persist the transcript BEFORE flipping to "reviewing".
+            # If status flipped first and this write failed, a retry would see
+            # "reviewing" + no transcript and re-submit Rev.ai, defeating the fix.
+            await storage.update_review_transcript(review_id, transcript, speaker_map)
+            logger.info("Transcript checkpoint persisted for review %s", review_id)
 
-        await storage.update_review_status(review_id, "reviewing")
+        await storage.update_review_status(review_id, "reviewing", guard_terminal=True)
 
         logger.info("Starting review generation for review %s", review_id)
         review_data = reviewer.review_call(transcript, criteria)
         logger.info("Review generation complete for review %s", review_id)
 
         review["transcript"] = transcript
-        review["speaker_map"] = {str(k): v for k, v in speaker_map.items()}
+        review["speaker_map"] = speaker_map
         review["review"] = review_data
         review["framework"] = {
             "template_name": template.get("name", ""),
@@ -55,7 +81,9 @@ def process_review_task(self, review_id: str, template_id: str):
         }
         review["status"] = "complete"
 
-        # Default major focus — non-fatal; never blocks pipeline completion
+        # Default major focus — non-fatal; never blocks pipeline completion.
+        # Intentionally re-runs on a resumed attempt (one extra LLM call); cheap
+        # relative to re-transcribing and never marks the review failed.
         try:
             categories = review_data.get("categories", [])
             idx = reviewer.pick_default_focus_index(categories)
@@ -80,8 +108,16 @@ def process_review_task(self, review_id: str, template_id: str):
     try:
         asyncio.run(_run())
     except Exception as exc:
-        logger.error("Task failed for review %s: %s", review_id, exc, exc_info=True)
+        logger.error(
+            "Task failed for review %s (attempt %s/%s): %s",
+            review_id, self.request.retries, self.max_retries, exc, exc_info=True,
+        )
         try:
+            if self.request.retries < self.max_retries:
+                logger.warning(
+                    "Retrying review %s (attempt %s of %s) in %ss — resumes from checkpoint",
+                    review_id, self.request.retries + 1, self.max_retries, self.default_retry_delay,
+                )
             self.retry(exc=exc)
         except MaxRetriesExceededError:
             logger.error("Max retries exceeded for review %s, marking as failed.", review_id)
