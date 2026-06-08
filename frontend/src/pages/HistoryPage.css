@@ -81,6 +81,25 @@
   max-width: 420px;
 }
 
+/* Sort selector — always visible alongside Search and the Filters toggle */
+.history-page__sort {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 180px;
+}
+
+.history-page__sort-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+
+.history-page__sort .ss {
+  flex: 1;
+}
+
 /* "Filters" toggle button — secondary-on-dark, mirrors the page's button language */
 .history-page__filter-toggle {
   display: inline-flex;

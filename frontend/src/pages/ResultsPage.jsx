@@ -3,7 +3,9 @@ import { useParams, Link } from 'react-router-dom'
 import ReviewResults from '../components/ReviewResults'
 import ChatPanel from '../components/ChatPanel'
 import { useLoadingWatchdog } from '../hooks/useLoadingWatchdog'
-import { chatAboutReview, getReview, updateReviewOutcome } from '../services/api'
+import { useAuth } from '../context/AuthContext'
+import { chatAboutReview, downloadReviewPdf, getReview, updateReviewMajorFocus, updateReviewOutcome } from '../services/api'
+import { downloadBlob } from '../lib/download'
 import './ResultsPage.css'
 
 function RobotIcon() {
@@ -34,6 +36,8 @@ function RobotIcon() {
 
 export default function ResultsPage() {
   const { id } = useParams()
+  const { user } = useAuth()
+  const isBds = user?.role === 'bds_rep'
   const [review, setReview] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -41,8 +45,31 @@ export default function ResultsPage() {
   const [outcomeError, setOutcomeError] = useState(null)
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [chatMessages, setChatMessages] = useState([])
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [downloadError, setDownloadError] = useState(null)
+  const [isGeneratingFocus, setIsGeneratingFocus] = useState(false)
+  const [majorFocusError, setMajorFocusError] = useState(null)
   const transcriptRef = useRef(null)
   useLoadingWatchdog(isLoading, setIsLoading, { label: 'results' })
+
+  async function handleDownloadPdf() {
+    setIsDownloading(true)
+    setDownloadError(null)
+    try {
+      const blob = await downloadReviewPdf(id)
+      const meta = review?.metadata || {}
+      const advisor = (meta.advisor_name || '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '')
+      const prospect = (meta.prospect_name || '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '')
+      const date = review?.created_at ? review.created_at.slice(0, 10) : ''
+      const parts = [advisor, prospect, date].filter(Boolean)
+      const filename = `Call-Review-${parts.length ? parts.join('-') : 'Review'}.pdf`
+      downloadBlob(blob, filename)
+    } catch (err) {
+      setDownloadError(err.message || 'Failed to download PDF.')
+    } finally {
+      setIsDownloading(false)
+    }
+  }
 
   async function handleOutcomeChange(newOutcome) {
     const snapshot = review
@@ -62,6 +89,21 @@ export default function ResultsPage() {
       setOutcomeError(err.message || 'Failed to update outcome.')
     } finally {
       setIsSavingOutcome(false)
+    }
+  }
+
+  async function handleGenerateMajorFocus(criterionId) {
+    const snapshot = review
+    setMajorFocusError(null)
+    setIsGeneratingFocus(true)
+    try {
+      const updated = await updateReviewMajorFocus(id, criterionId)
+      setReview(updated)
+    } catch (err) {
+      setReview(snapshot)
+      setMajorFocusError(err.message || 'Failed to generate major focus.')
+    } finally {
+      setIsGeneratingFocus(false)
     }
   }
 
@@ -127,13 +169,34 @@ export default function ResultsPage() {
 
         {!isLoading && !error && review && (
           <>
-            <h1 className="results-page__title">Call Review</h1>
+            <div className="results-page__header-row">
+              <h1 className="results-page__title">Call Review</h1>
+              {review.status === 'complete' && review.review?.categories?.length > 0 && (
+                <div className="results-page__header-actions">
+                  <button
+                    className="results-page__download-btn"
+                    onClick={handleDownloadPdf}
+                    disabled={isDownloading}
+                  >
+                    {isDownloading ? 'Generating…' : 'Download PDF'}
+                  </button>
+                  {downloadError && (
+                    <p className="results-page__download-error">{downloadError}</p>
+                  )}
+                </div>
+              )}
+            </div>
             <ReviewResults
               review={review}
               onOutcomeChange={handleOutcomeChange}
               isSavingOutcome={isSavingOutcome}
               outcomeError={outcomeError}
               transcriptRef={transcriptRef}
+              isBds={isBds}
+              majorFocus={review.major_focus}
+              onGenerateMajorFocus={handleGenerateMajorFocus}
+              isGeneratingFocus={isGeneratingFocus}
+              majorFocusError={majorFocusError}
             />
           </>
         )}

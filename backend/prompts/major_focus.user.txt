@@ -1,0 +1,10 @@
+Advisor (the person you are coaching): {advisor_name}
+
+Criterion: {criterion_title}
+Description: {criterion_description}
+Success condition: {success_condition}
+Score: {score}/{max_score}
+Feedback: {feedback}
+
+Transcript:
+{transcript}

@@ -8,6 +8,7 @@ const REQUEST_TIMEOUT_MS = 15_000
 const UPLOAD_TIMEOUT_MS = 60_000
 const CHAT_TIMEOUT_MS = 30_000
 const CHAT_AGENT_TIMEOUT_MS = 90_000
+const PDF_TIMEOUT_MS = 30_000
 
 export class NoSessionError extends Error {
   constructor() {
@@ -116,6 +117,36 @@ export async function updateReviewOutcome(id, callOutcome) {
     body: JSON.stringify({ call_outcome: callOutcome }),
   })
   return handleResponse(response)
+}
+
+// Pass a criterion_id to generate focus text for that criterion (BDS only).
+// Returns the full updated review.
+export async function updateReviewMajorFocus(id, criterionId) {
+  const headers = { ...(await authHeaders()), 'Content-Type': 'application/json' }
+  const response = await apiFetch(
+    `${BASE_URL}/reviews/${id}/major-focus`,
+    { method: 'PATCH', headers, body: JSON.stringify({ criterion_id: criterionId }) },
+    CHAT_TIMEOUT_MS,
+  )
+  return handleResponse(response)
+}
+
+export async function downloadReviewPdf(id) {
+  const headers = await authHeaders()
+  const response = await apiFetch(`${BASE_URL}/reviews/${id}/pdf`, { headers }, PDF_TIMEOUT_MS)
+  if (!response.ok) {
+    let errorMessage = `Request failed with status ${response.status}`
+    try {
+      const errorData = await response.json()
+      errorMessage = errorData.detail || errorData.message || errorMessage
+    } catch {
+      // non-JSON error body
+    }
+    const err = new Error(errorMessage)
+    err.status = response.status
+    throw err
+  }
+  return response.blob()
 }
 
 export async function chatAboutReview(id, messages) {

@@ -22,12 +22,61 @@
   color: var(--color-primary);
 }
 
+.results-page__header-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  margin-bottom: var(--space-xl);
+  flex-wrap: wrap;
+}
+
+.results-page__header-row .results-page__title {
+  margin-bottom: 0;
+  flex: 1;
+}
+
 .results-page__title {
   font-size: 28px;
   font-weight: 700;
   color: var(--color-on-dark);
   line-height: 1.2;
   margin-bottom: var(--space-xl);
+}
+
+.results-page__header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-shrink: 0;
+}
+
+.results-page__download-btn {
+  padding: 8px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--font-family);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-md);
+  background-color: var(--color-surface);
+  color: var(--color-on-dark);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.results-page__download-btn:hover:not(:disabled) {
+  background-color: var(--color-surface-elevated);
+  border-color: var(--color-muted);
+}
+
+.results-page__download-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.results-page__download-error {
+  font-size: 12px;
+  color: var(--color-danger);
+  margin: 0;
 }
 
 /* Floating "Ask AI" robot button — fixed below the top nav, stays visible while scrolling.

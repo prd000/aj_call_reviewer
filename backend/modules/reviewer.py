@@ -256,6 +256,66 @@ def _format_transcript(transcript: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def pick_default_focus_index(categories: list[dict]) -> int | None:
+    """Return the index of the category with the largest absolute point deficit.
+
+    Tie-break: lowest score/max_score ratio, then first occurrence.
+    Returns None if no scored categories exist.
+    """
+    scored = [
+        (i, c)
+        for i, c in enumerate(categories)
+        if isinstance(c.get("score"), (int, float)) and c.get("max_score")
+    ]
+    if not scored:
+        return None
+
+    def _key(item):
+        i, c = item
+        deficit = c["max_score"] - c["score"]
+        ratio = c["score"] / c["max_score"]
+        return (-deficit, ratio, i)
+
+    return min(scored, key=_key)[0]
+
+
+def generate_major_focus(
+    transcript: list[dict],
+    criterion: dict,
+    category: dict,
+    advisor_name: str = "",
+) -> str:
+    """Generate 1-2 sentence coaching focus text for the given criterion.
+
+    ``advisor_name`` is the name of the advisor being coached; it is passed to
+    the prompt so the coaching is addressed to the advisor (not the prospect).
+    Falls back to a generic label when not supplied.
+
+    Raises LLMUnavailableError if no API key is configured.
+    """
+    if not get_llm_api_key():
+        raise LLMUnavailableError("No LLM API key is configured.")
+
+    transcript_text = _format_transcript_labeled(transcript, {})
+    system_prompt = load_prompt("major_focus.system")
+    user_prompt = load_prompt("major_focus.user").format(
+        advisor_name=(advisor_name or "").strip() or "the advisor",
+        criterion_title=criterion.get("title", ""),
+        criterion_description=criterion.get("description", ""),
+        success_condition=criterion.get("success_condition", ""),
+        score=category.get("score", 0),
+        max_score=category.get("max_score", 10),
+        feedback=category.get("feedback", ""),
+        transcript=transcript_text,
+    )
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=user_prompt),
+    ]
+    llm = get_llm(temperature=0.3)
+    return llm.invoke(messages).content.strip()
+
+
 def review_call(transcript: list[dict], criteria: list[dict]) -> dict:
     """
     Generate a structured review for a call transcript.
