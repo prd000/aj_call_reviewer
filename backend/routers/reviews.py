@@ -4,11 +4,13 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from modules.auth import get_current_user
 from modules.firms import list_firms
 from modules.ingestion import CallOutcome
 from modules.history_chat import chat_over_reviews
+from modules.pdf_export import render_review_pdf, review_pdf_filename
 from modules.reviewer import LLMUnavailableError, chat_about_transcript
 from modules.storage import (
     delete_recording_from_storage,
@@ -239,6 +241,24 @@ async def chat_over_history(
             status_code=502,
             detail="Couldn't get an answer. Please try again later.",
         )
+
+
+@router.get("/reviews/{review_id}/pdf")
+async def download_review_pdf(review_id: str, user: dict = Depends(get_current_user)):
+    review = await get_review(review_id)
+    if review is None:
+        raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
+    if user["role"] == "financial_advisor" and not _fa_can_access(review, user):
+        raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
+    if review.get("status") != "complete" or not (review.get("review") or {}).get("categories"):
+        raise HTTPException(status_code=400, detail="Review is not finished yet.")
+    pdf_bytes = await run_in_threadpool(render_review_pdf, review)
+    filename = review_pdf_filename(review)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.delete("/reviews/{review_id}", status_code=204)
