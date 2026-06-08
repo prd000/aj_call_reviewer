@@ -279,8 +279,17 @@ def pick_default_focus_index(categories: list[dict]) -> int | None:
     return min(scored, key=_key)[0]
 
 
-def generate_major_focus(transcript: list[dict], criterion: dict, category: dict) -> str:
+def generate_major_focus(
+    transcript: list[dict],
+    criterion: dict,
+    category: dict,
+    advisor_name: str = "",
+) -> str:
     """Generate 1-2 sentence coaching focus text for the given criterion.
+
+    ``advisor_name`` is the name of the advisor being coached; it is passed to
+    the prompt so the coaching is addressed to the advisor (not the prospect).
+    Falls back to a generic label when not supplied.
 
     Raises LLMUnavailableError if no API key is configured.
     """
@@ -290,6 +299,7 @@ def generate_major_focus(transcript: list[dict], criterion: dict, category: dict
     transcript_text = _format_transcript_labeled(transcript, {})
     system_prompt = load_prompt("major_focus.system")
     user_prompt = load_prompt("major_focus.user").format(
+        advisor_name=(advisor_name or "").strip() or "the advisor",
         criterion_title=criterion.get("title", ""),
         criterion_description=criterion.get("description", ""),
         success_condition=criterion.get("success_condition", ""),

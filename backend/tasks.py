@@ -62,7 +62,8 @@ def process_review_task(self, review_id: str, template_id: str):
             if idx is not None and idx < len(criteria):
                 criterion = criteria[idx]
                 category = categories[idx]
-                focus_text = reviewer.generate_major_focus(transcript, criterion, category)
+                advisor_name = (review.get("metadata") or {}).get("advisor_name") or ""
+                focus_text = reviewer.generate_major_focus(transcript, criterion, category, advisor_name)
                 review["major_focus"] = {
                     "criterion_id": criterion.get("id", ""),
                     "criterion_title": criterion.get("title", ""),

@@ -96,6 +96,33 @@ def test_generate_major_focus_returns_text():
     mock_llm.invoke.assert_called_once()
 
 
+def test_generate_major_focus_addresses_advisor_by_name():
+    """The advisor name must reach the prompt so coaching addresses the advisor."""
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = MagicMock(content="Jag, ask more discovery questions.")
+
+    with patch("modules.reviewer.get_llm_api_key", return_value="fake-key"), \
+         patch("modules.reviewer.get_llm", return_value=mock_llm):
+        generate_major_focus(SAMPLE_TRANSCRIPT, SAMPLE_CRITERION, SAMPLE_CATEGORY, advisor_name="Jag")
+
+    messages = mock_llm.invoke.call_args[0][0]
+    user_content = messages[-1].content
+    assert "Jag" in user_content
+
+
+def test_generate_major_focus_falls_back_when_no_advisor_name():
+    """Missing advisor name degrades to a generic label rather than an empty one."""
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = MagicMock(content="Ask more discovery questions.")
+
+    with patch("modules.reviewer.get_llm_api_key", return_value="fake-key"), \
+         patch("modules.reviewer.get_llm", return_value=mock_llm):
+        generate_major_focus(SAMPLE_TRANSCRIPT, SAMPLE_CRITERION, SAMPLE_CATEGORY, advisor_name="")
+
+    user_content = mock_llm.invoke.call_args[0][0][-1].content
+    assert "the advisor" in user_content
+
+
 def test_generate_major_focus_raises_when_no_key():
     with patch("modules.reviewer.get_llm_api_key", return_value=""):
         with pytest.raises(LLMUnavailableError):

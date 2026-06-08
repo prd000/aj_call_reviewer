@@ -195,9 +195,10 @@ async def update_review_major_focus_by_id(
     category = categories[criterion_index]
 
     transcript = review.get("transcript") or []
+    advisor_name = (review.get("metadata") or {}).get("advisor_name") or ""
 
     try:
-        text = generate_major_focus(transcript, criterion, category)
+        text = generate_major_focus(transcript, criterion, category, advisor_name)
     except LLMUnavailableError:
         raise HTTPException(
             status_code=503,
