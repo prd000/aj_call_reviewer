@@ -54,6 +54,25 @@ def process_review_task(self, review_id: str, template_id: str):
             "criteria": criteria,
         }
         review["status"] = "complete"
+
+        # Default major focus — non-fatal; never blocks pipeline completion
+        try:
+            categories = review_data.get("categories", [])
+            idx = reviewer.pick_default_focus_index(categories)
+            if idx is not None and idx < len(criteria):
+                criterion = criteria[idx]
+                category = categories[idx]
+                focus_text = reviewer.generate_major_focus(transcript, criterion, category)
+                review["major_focus"] = {
+                    "criterion_id": criterion.get("id", ""),
+                    "criterion_title": criterion.get("title", ""),
+                    "text": focus_text,
+                    "is_auto": True,
+                }
+                logger.info("Major focus auto-generated for review %s (criterion: %s)", review_id, criterion.get("title"))
+        except Exception as exc:
+            logger.warning("Major focus generation failed for review %s: %s", review_id, exc)
+
         await storage.save_review(review)
         await storage.delete_recording_from_storage(review["storage_path"])
 

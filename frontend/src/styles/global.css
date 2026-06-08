@@ -98,6 +98,27 @@ img {
   width: 100%;
 }
 
+/* Primary CTA button — yellow, used for key actions (Generate, Save, etc.) */
+.button-primary {
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+  border: none;
+  border-radius: var(--rounded-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), opacity var(--transition-fast);
+}
+
+.button-primary:hover:not(:disabled) {
+  background-color: var(--color-primary-active);
+}
+
+.button-primary:disabled {
+  background-color: var(--color-primary-disabled);
+  color: var(--color-muted);
+  cursor: not-allowed;
+}
+
 /* Shared management button classes used across management components */
 .mgmt-btn {
   height: 36px;

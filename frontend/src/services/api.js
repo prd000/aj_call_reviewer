@@ -119,6 +119,18 @@ export async function updateReviewOutcome(id, callOutcome) {
   return handleResponse(response)
 }
 
+// Pass a criterion_id to generate focus text for that criterion (BDS only).
+// Returns the full updated review.
+export async function updateReviewMajorFocus(id, criterionId) {
+  const headers = { ...(await authHeaders()), 'Content-Type': 'application/json' }
+  const response = await apiFetch(
+    `${BASE_URL}/reviews/${id}/major-focus`,
+    { method: 'PATCH', headers, body: JSON.stringify({ criterion_id: criterionId }) },
+    CHAT_TIMEOUT_MS,
+  )
+  return handleResponse(response)
+}
+
 export async function downloadReviewPdf(id) {
   const headers = await authHeaders()
   const response = await apiFetch(`${BASE_URL}/reviews/${id}/pdf`, { headers }, PDF_TIMEOUT_MS)

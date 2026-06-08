@@ -131,3 +131,23 @@ def test_score_color_yellow():
 def test_score_color_red():
     assert _score_color(0.0) == "#f6465d"
     assert _score_color(0.39) == "#f6465d"
+
+
+def test_render_with_major_focus():
+    review = {
+        **_FULL_REVIEW,
+        "major_focus": {
+            "criterion_id": "abc",
+            "criterion_title": "Needs Discovery",
+            "text": "Ask deeper open-ended questions to uncover three distinct client needs before presenting solutions.",
+            "is_auto": True,
+        },
+    }
+    result = render_review_pdf(review)
+    assert result.startswith(b"%PDF")
+
+
+def test_render_without_major_focus_degrades_gracefully():
+    review = {**_FULL_REVIEW, "major_focus": None}
+    result = render_review_pdf(review)
+    assert result.startswith(b"%PDF")

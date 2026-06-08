@@ -3,7 +3,8 @@ import { useParams, Link } from 'react-router-dom'
 import ReviewResults from '../components/ReviewResults'
 import ChatPanel from '../components/ChatPanel'
 import { useLoadingWatchdog } from '../hooks/useLoadingWatchdog'
-import { chatAboutReview, downloadReviewPdf, getReview, updateReviewOutcome } from '../services/api'
+import { useAuth } from '../context/AuthContext'
+import { chatAboutReview, downloadReviewPdf, getReview, updateReviewMajorFocus, updateReviewOutcome } from '../services/api'
 import { downloadBlob } from '../lib/download'
 import './ResultsPage.css'
 
@@ -35,6 +36,8 @@ function RobotIcon() {
 
 export default function ResultsPage() {
   const { id } = useParams()
+  const { user } = useAuth()
+  const isBds = user?.role === 'bds_rep'
   const [review, setReview] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -44,6 +47,8 @@ export default function ResultsPage() {
   const [chatMessages, setChatMessages] = useState([])
   const [isDownloading, setIsDownloading] = useState(false)
   const [downloadError, setDownloadError] = useState(null)
+  const [isGeneratingFocus, setIsGeneratingFocus] = useState(false)
+  const [majorFocusError, setMajorFocusError] = useState(null)
   const transcriptRef = useRef(null)
   useLoadingWatchdog(isLoading, setIsLoading, { label: 'results' })
 
@@ -84,6 +89,21 @@ export default function ResultsPage() {
       setOutcomeError(err.message || 'Failed to update outcome.')
     } finally {
       setIsSavingOutcome(false)
+    }
+  }
+
+  async function handleGenerateMajorFocus(criterionId) {
+    const snapshot = review
+    setMajorFocusError(null)
+    setIsGeneratingFocus(true)
+    try {
+      const updated = await updateReviewMajorFocus(id, criterionId)
+      setReview(updated)
+    } catch (err) {
+      setReview(snapshot)
+      setMajorFocusError(err.message || 'Failed to generate major focus.')
+    } finally {
+      setIsGeneratingFocus(false)
     }
   }
 
@@ -172,6 +192,11 @@ export default function ResultsPage() {
               isSavingOutcome={isSavingOutcome}
               outcomeError={outcomeError}
               transcriptRef={transcriptRef}
+              isBds={isBds}
+              majorFocus={review.major_focus}
+              onGenerateMajorFocus={handleGenerateMajorFocus}
+              isGeneratingFocus={isGeneratingFocus}
+              majorFocusError={majorFocusError}
             />
           </>
         )}

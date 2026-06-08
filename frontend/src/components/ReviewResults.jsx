@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import ScoreCard from './ScoreCard'
 import TranscriptPanel from './TranscriptPanel'
 import FrameworkPanel from './FrameworkPanel'
@@ -36,12 +37,31 @@ function getOverallScoreClass(ratio) {
   return 'review-results__avg-score--low'
 }
 
-export default function ReviewResults({ review, onOutcomeChange, isSavingOutcome, outcomeError, transcriptRef }) {
+export default function ReviewResults({
+  review,
+  onOutcomeChange,
+  isSavingOutcome,
+  outcomeError,
+  transcriptRef,
+  isBds,
+  majorFocus,
+  onGenerateMajorFocus,
+  isGeneratingFocus,
+  majorFocusError,
+}) {
+  const [selectedCriterionId, setSelectedCriterionId] = useState(majorFocus?.criterion_id || '')
   const { metadata, review: reviewData, transcript, speaker_map, framework, created_at } = review
   const categories = reviewData?.categories || []
   const frameworkCriteria = framework?.criteria || []
   const summary = reviewData?.summary || ''
   const overallScore = getOverallScore(categories)
+
+  // Sync dropdown selection when focus prop updates (e.g. after generate completes).
+  useEffect(() => {
+    if (majorFocus?.criterion_id) {
+      setSelectedCriterionId(majorFocus.criterion_id)
+    }
+  }, [majorFocus?.criterion_id])
 
   return (
     <div className="review-results">
@@ -95,6 +115,51 @@ export default function ReviewResults({ review, onOutcomeChange, isSavingOutcome
           <div className="review-results__summary">
             <h2 className="review-results__summary-heading">Summary</h2>
             <p className="review-results__summary-text">{summary}</p>
+          </div>
+        )}
+
+        {/* Major Focus block */}
+        {(majorFocus?.text || isBds) && frameworkCriteria.length > 0 && (
+          <div className="review-results__major-focus">
+            <h2 className="review-results__summary-heading">Major Focus</h2>
+
+            {isBds && (
+              <div className="review-results__major-focus-controls">
+                <SearchableSelect
+                  id="major-focus-criterion"
+                  size="sm"
+                  options={frameworkCriteria.map((c) => ({ value: c.id, label: c.title }))}
+                  value={selectedCriterionId}
+                  onChange={setSelectedCriterionId}
+                  placeholder="Select criterion…"
+                  disabled={isGeneratingFocus}
+                />
+                <button
+                  className="button-primary review-results__major-focus-btn"
+                  onClick={() => onGenerateMajorFocus(selectedCriterionId)}
+                  disabled={isGeneratingFocus || !selectedCriterionId}
+                >
+                  {isGeneratingFocus ? 'Generating…' : 'Generate'}
+                </button>
+              </div>
+            )}
+
+            {majorFocus?.text ? (
+              <>
+                {majorFocus.is_auto && isBds && (
+                  <span className="review-results__major-focus-auto">Auto-selected</span>
+                )}
+                <p className="review-results__summary-text">{majorFocus.text}</p>
+              </>
+            ) : (
+              !isBds && (
+                <p className="review-results__major-focus-empty">No focus set yet.</p>
+              )
+            )}
+
+            {majorFocusError && (
+              <span className="review-results__meta-error">{majorFocusError}</span>
+            )}
           </div>
         )}
       </div>

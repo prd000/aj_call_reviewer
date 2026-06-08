@@ -221,6 +221,24 @@ def render_review_pdf(review: dict) -> bytes:
             p.set_text_color(*INK)
             p.multi_cell(w, 5, _t(summary), align="L", **_NL)
 
+        # Major Focus block (directly after summary).
+        major_focus = review.get("major_focus") or {}
+        focus_text = major_focus.get("text", "")
+        if focus_text:
+            p.ln(3)
+            p.set_x(x)
+            focus_criterion = major_focus.get("criterion_title", "")
+            focus_label = "MAJOR FOCUS"
+            if focus_criterion:
+                focus_label = f"MAJOR FOCUS — {focus_criterion.upper()}"
+            p.set_font("Helvetica", "B", 8)
+            p.set_text_color(*MUTED)
+            p.cell(w, 4, _t(focus_label), **_NL)
+            p.set_x(x)
+            p.set_font("Helvetica", "", 11)
+            p.set_text_color(*INK)
+            p.multi_cell(w, 5, _t(focus_text), align="L", **_NL)
+
     if meta_rows or overall is not None or summary:
         _draw_card(pdf, _summary_card, radius=RADIUS_XL)
         pdf.ln(6)

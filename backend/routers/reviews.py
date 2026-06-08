@@ -6,17 +6,18 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
-from modules.auth import get_current_user
+from modules.auth import get_current_user, require_bds_rep
 from modules.firms import list_firms
 from modules.ingestion import CallOutcome
 from modules.history_chat import chat_over_reviews
 from modules.pdf_export import render_review_pdf, review_pdf_filename
-from modules.reviewer import LLMUnavailableError, chat_about_transcript
+from modules.reviewer import LLMUnavailableError, chat_about_transcript, generate_major_focus
 from modules.storage import (
     delete_recording_from_storage,
     delete_review,
     get_review,
     list_reviews,
+    update_review_major_focus,
     update_review_outcome,
 )
 from modules.user_profiles import list_bds_reps, list_profiles_by_ids
@@ -92,6 +93,10 @@ class OutcomeBody(BaseModel):
     call_outcome: CallOutcome | None = None
 
 
+class MajorFocusBody(BaseModel):
+    criterion_id: str
+
+
 class ChatMessage(BaseModel):
     role: Literal["user", "assistant"]
     content: str
@@ -156,6 +161,62 @@ async def update_review_outcome_by_id(
         raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
     # Outcome is metadata, editable regardless of review status.
     await update_review_outcome(review_id, body.call_outcome)
+    return await get_review(review_id)
+
+
+@router.patch("/reviews/{review_id}/major-focus")
+async def update_review_major_focus_by_id(
+    review_id: str,
+    body: MajorFocusBody,
+    user: dict = Depends(require_bds_rep),
+):
+    review = await get_review(review_id)
+    if review is None:
+        raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
+
+    if review.get("status") != "complete":
+        raise HTTPException(status_code=400, detail="Review is not complete yet.")
+
+    categories = (review.get("review") or {}).get("categories", [])
+    if not categories:
+        raise HTTPException(status_code=400, detail="Review has no scored categories.")
+
+    framework_criteria = (review.get("framework") or {}).get("criteria", [])
+    if not framework_criteria:
+        raise HTTPException(status_code=400, detail="Review has no framework criteria.")
+
+    criterion = next((c for c in framework_criteria if c.get("id") == body.criterion_id), None)
+    if criterion is None:
+        raise HTTPException(status_code=400, detail=f"Criterion '{body.criterion_id}' not found in this review's framework.")
+
+    criterion_index = framework_criteria.index(criterion)
+    if criterion_index >= len(categories):
+        raise HTTPException(status_code=400, detail="Criterion index out of range for scored categories.")
+    category = categories[criterion_index]
+
+    transcript = review.get("transcript") or []
+
+    try:
+        text = generate_major_focus(transcript, criterion, category)
+    except LLMUnavailableError:
+        raise HTTPException(
+            status_code=503,
+            detail="Major focus generation is unavailable: no AI provider is configured.",
+        )
+    except Exception as exc:
+        logger.error("update_review_major_focus_by_id failed: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=502,
+            detail="Couldn't generate major focus. Please try again later.",
+        )
+
+    focus = {
+        "criterion_id": body.criterion_id,
+        "criterion_title": criterion.get("title", ""),
+        "text": text,
+        "is_auto": False,
+    }
+    await update_review_major_focus(review_id, focus)
     return await get_review(review_id)
 
 

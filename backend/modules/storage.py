@@ -31,6 +31,7 @@ def _to_row(review: dict) -> dict:
         "firm_id": review.get("firm_id"),
         "uploaded_by": review.get("uploaded_by"),
         "uploader_role": review.get("uploader_role"),
+        "major_focus": review.get("major_focus"),
     }
 
 
@@ -57,6 +58,7 @@ def _from_row(row: dict) -> dict:
         "firm_id": row.get("firm_id"),
         "uploaded_by": row.get("uploaded_by"),
         "uploader_role": row.get("uploader_role"),
+        "major_focus": row.get("major_focus"),
     }
 
 
@@ -117,6 +119,16 @@ async def update_review_status(
         patch["error_message"] = error_message
     if celery_task_id is not None:
         patch["celery_task_id"] = celery_task_id
+    await client.table("reviews").update(patch).eq("id", review_id).execute()
+
+
+async def update_review_major_focus(review_id: str, major_focus: dict | None) -> None:
+    """Partial update of a review's major focus block.
+
+    Always writes the key so passing None clears back to NULL.
+    """
+    client = await get_client()
+    patch = {"major_focus": major_focus}
     await client.table("reviews").update(patch).eq("id", review_id).execute()
 
 
