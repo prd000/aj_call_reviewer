@@ -230,7 +230,7 @@ def render_review_pdf(review: dict) -> bytes:
             focus_criterion = major_focus.get("criterion_title", "")
             focus_label = "MAJOR FOCUS"
             if focus_criterion:
-                focus_label = f"MAJOR FOCUS — {focus_criterion.upper()}"
+                focus_label = f"MAJOR FOCUS - {focus_criterion.upper()}"
             p.set_font("Helvetica", "B", 8)
             p.set_text_color(*MUTED)
             p.cell(w, 4, _t(focus_label), **_NL)
