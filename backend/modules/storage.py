@@ -78,6 +78,29 @@ async def get_review(review_id: str) -> dict | None:
     return _from_row(result.data[0])
 
 
+IN_PROGRESS_STATUSES = ("pending", "transcribing", "reviewing")
+
+
+async def list_stuck_reviews(
+    cutoff_iso: str,
+    statuses: tuple = IN_PROGRESS_STATUSES,
+) -> list[dict]:
+    """Return in-progress reviews that haven't been updated since cutoff_iso.
+
+    Queries only rows with in-progress statuses and a stale updated_at — never
+    scans completed reviews or fetches transcript/review_results payloads.
+    """
+    client = await get_client()
+    result = (
+        await client.table("reviews")
+        .select("id, status, storage_path, created_at, updated_at")
+        .in_("status", list(statuses))
+        .lt("updated_at", cutoff_iso)
+        .execute()
+    )
+    return result.data or []
+
+
 async def list_reviews(
     firm_id: str | None = None,
     uploader_role: str | None = None,

@@ -1,9 +1,13 @@
-"""Tests for process_review_task (Bug #2 fix).
+"""Tests for process_review_task (Bug #2 fix) and Bug #3 fix.
 
-Covers: idempotency no-op on a complete review, transcript checkpoint + resume so
+Bug #2 covers: idempotency no-op on a complete review, transcript checkpoint + resume so
 a review-phase retry never re-transcribes, the inverse (a transcription-phase
 failure DOES re-transcribe), the guarded status write, and the Celery
 delivery-hardening config.
+
+Bug #3 covers: SoftTimeLimitExceeded writes failed + no retry; stuck-review reaper
+marks stuck rows failed with guard_terminal; list_stuck_reviews issues the correct
+server-side filters.
 
 Retries are simulated deterministically (independent of Celery eager-retry
 semantics): `process_review_task.retry` is patched to abort the current attempt,
@@ -15,9 +19,10 @@ import logging
 from unittest.mock import patch, MagicMock, AsyncMock
 
 import tasks as tasks_module
-from tasks import process_review_task
+from tasks import process_review_task, reap_stuck_reviews
 from modules import storage
 from celery_app import app
+from celery.exceptions import SoftTimeLimitExceeded
 
 
 # ---------------------------------------------------------------------------
@@ -176,11 +181,20 @@ def _make_query_recorder():
         def update(self, patch_dict):
             calls.append(("update", patch_dict)); return self
 
+        def select(self, cols):
+            calls.append(("select", cols)); return self
+
         def eq(self, col, val):
             calls.append(("eq", col, val)); return self
 
         def neq(self, col, val):
             calls.append(("neq", col, val)); return self
+
+        def in_(self, col, vals):
+            calls.append(("in_", col, vals)); return self
+
+        def lt(self, col, val):
+            calls.append(("lt", col, val)); return self
 
         async def execute(self):
             calls.append(("execute",)); return MagicMock(data=[])
@@ -254,4 +268,108 @@ def test_celery_delivery_hardening_config():
     assert app.conf.worker_prefetch_multiplier == 1
     # Must exceed the transcription poll ceiling (360 * 5 = 1800s) so an in-flight
     # task is never redelivered while still running.
-    assert app.conf.broker_transport_options["visibility_timeout"] > 1800
+    vt = app.conf.broker_transport_options["visibility_timeout"]
+    assert vt > 1800
+    # Time-limit ordering invariant: 1800 < soft < hard < visibility_timeout
+    soft = app.conf.task_soft_time_limit
+    hard = app.conf.task_time_limit
+    assert soft is not None and hard is not None, "Soft/hard time limits must be set (Bug #3 fix)"
+    assert 1800 < soft < hard < vt
+    # Reaper beat schedule must be registered
+    assert "reap-stuck-reviews" in app.conf.beat_schedule
+
+
+# ---------------------------------------------------------------------------
+# (g) SoftTimeLimitExceeded -> fails fast, no retry (Bug #3 fix)
+# ---------------------------------------------------------------------------
+
+def test_soft_time_limit_fails_fast_no_retry(monkeypatch):
+    fake = FakeReviewDB()
+    transcribe = MagicMock(return_value=GOOD_TRANSCRIPT)
+    # review_call raises SoftTimeLimitExceeded (fired by Celery's soft-limit signal)
+    review_call = MagicMock(side_effect=SoftTimeLimitExceeded())
+    _install(monkeypatch, fake, transcribe=transcribe, review_call=review_call)
+
+    retry_mock = MagicMock()
+    with patch.object(process_review_task, "retry", retry_mock):
+        result = _attempt()
+
+    assert result == "done"
+    assert retry_mock.call_count == 0, "SoftTimeLimitExceeded must NOT trigger a retry"
+    assert fake.row.get("status") == "failed"
+    assert fake.row.get("error_message") is not None
+    assert "soft time limit" in (fake.row.get("error_message") or "").lower()
+    assert _count(fake.events, "delete") == 1, "Recording should be deleted on soft-limit failure"
+
+
+# ---------------------------------------------------------------------------
+# (h) Reaper marks stuck rows failed with guard_terminal (Bug #3 fix)
+# ---------------------------------------------------------------------------
+
+def test_reap_stuck_reviews(monkeypatch):
+    stuck_rows = [
+        {"id": "rev-stuck-1", "status": "reviewing", "storage_path": "rev-stuck-1/call.mp3",
+         "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z"},
+        {"id": "rev-stuck-2", "status": "transcribing", "storage_path": None,
+         "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z"},
+    ]
+    status_writes = {}
+    deleted = []
+
+    async def _list_stuck(cutoff_iso, statuses=storage.IN_PROGRESS_STATUSES):
+        return stuck_rows
+
+    async def _update_status(review_id, status, *, error_message=None, celery_task_id=None, guard_terminal=False):
+        status_writes[review_id] = {"status": status, "error_message": error_message, "guard_terminal": guard_terminal}
+
+    async def _get_review(review_id):
+        row = next((r for r in stuck_rows if r["id"] == review_id), None)
+        return row
+
+    async def _delete_recording(storage_path):
+        deleted.append(storage_path)
+
+    monkeypatch.setattr(tasks_module.storage, "list_stuck_reviews", _list_stuck)
+    monkeypatch.setattr(tasks_module.storage, "update_review_status", _update_status)
+    monkeypatch.setattr(tasks_module.storage, "get_review", _get_review)
+    monkeypatch.setattr(tasks_module.storage, "delete_recording_from_storage", _delete_recording)
+
+    reap_stuck_reviews()
+
+    assert "rev-stuck-1" in status_writes
+    assert status_writes["rev-stuck-1"]["status"] == "failed"
+    assert status_writes["rev-stuck-1"]["guard_terminal"] is True, "Reaper must use guard_terminal=True"
+    assert "rev-stuck-2" in status_writes
+    assert status_writes["rev-stuck-2"]["status"] == "failed"
+
+    # Recording for rev-stuck-1 (has a storage_path) should be deleted
+    assert "rev-stuck-1/call.mp3" in deleted
+
+
+# ---------------------------------------------------------------------------
+# (i) list_stuck_reviews issues server-side filters (Bug #3 fix)
+# ---------------------------------------------------------------------------
+
+def test_list_stuck_reviews_filters_server_side(monkeypatch):
+    calls, client = _make_query_recorder()
+    monkeypatch.setattr(storage, "get_client", AsyncMock(return_value=client))
+    asyncio.run(storage.list_stuck_reviews("2026-01-01T00:00:00+00:00"))
+
+    # Must filter by status IN (...) — never touches 'complete'/'failed'
+    in_calls = [c for c in calls if c[0] == "in_"]
+    assert len(in_calls) == 1, "Expected exactly one .in_() call"
+    assert in_calls[0][1] == "status"
+    for terminal in ("complete", "failed"):
+        assert terminal not in in_calls[0][2], f"Reaper query must exclude '{terminal}' rows"
+
+    # Must filter by updated_at < cutoff
+    lt_calls = [c for c in calls if c[0] == "lt"]
+    assert len(lt_calls) == 1
+    assert lt_calls[0][1] == "updated_at"
+
+    # Must select only narrow columns — no transcript or review_results payload
+    select_calls = [c for c in calls if c[0] == "select"]
+    assert len(select_calls) == 1
+    selected = select_calls[0][1]
+    assert "transcript" not in selected
+    assert "review_results" not in selected
