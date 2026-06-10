@@ -32,6 +32,7 @@ def _to_row(review: dict) -> dict:
         "uploaded_by": review.get("uploaded_by"),
         "uploader_role": review.get("uploader_role"),
         "major_focus": review.get("major_focus"),
+        "template_id": review.get("template_id"),
     }
 
 
@@ -59,6 +60,7 @@ def _from_row(row: dict) -> dict:
         "uploaded_by": row.get("uploaded_by"),
         "uploader_role": row.get("uploader_role"),
         "major_focus": row.get("major_focus"),
+        "template_id": row.get("template_id"),
     }
 
 
@@ -135,6 +137,7 @@ async def update_review_status(
     error_message: str | None = None,
     celery_task_id: str | None = None,
     guard_terminal: bool = False,
+    clear_error_message: bool = False,
 ) -> None:
     """Partial update of a review's status and optional fields.
 
@@ -144,11 +147,17 @@ async def update_review_status(
     ``"transcribing"``/``"reviewing"``. Default False preserves unconditional
     writes for callers that must always apply — the ``"failed"`` cleanup write
     (tasks.py) and the initial ``"pending"`` write (upload.py).
+
+    Pass ``clear_error_message=True`` to reset ``error_message`` back to NULL (used
+    by the Retry endpoint when re-queuing a previously-failed review). An explicit
+    ``error_message`` takes precedence over the clear.
     """
     client = await get_client()
     patch: dict = {"status": status}
     if error_message is not None:
         patch["error_message"] = error_message
+    elif clear_error_message:
+        patch["error_message"] = None
     if celery_task_id is not None:
         patch["celery_task_id"] = celery_task_id
     query = client.table("reviews").update(patch).eq("id", review_id)

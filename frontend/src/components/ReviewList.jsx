@@ -55,10 +55,11 @@ function TrashIcon() {
   )
 }
 
-function ReviewListItem({ review, onClick, onDelete }) {
+function ReviewListItem({ review, onClick, onDelete, onRetry }) {
   const { metadata, created_at, overall_score, overall_max_score, status } = review
   const [showConfirm, setShowConfirm] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isRetrying, setIsRetrying] = useState(false)
 
   const isInProgress = IN_PROGRESS_STATUSES.includes(status)
   const isFailed = status === 'failed'
@@ -82,6 +83,17 @@ function ReviewListItem({ review, onClick, onDelete }) {
     } catch {
       setIsDeleting(false)
       setShowConfirm(false)
+    }
+  }
+
+  async function handleRetryClick(e) {
+    e.stopPropagation()
+    setIsRetrying(true)
+    try {
+      await onRetry(review.id)
+      // Parent flips status to in-progress; this row re-renders out of the failed branch.
+    } catch {
+      setIsRetrying(false)
     }
   }
 
@@ -147,6 +159,13 @@ function ReviewListItem({ review, onClick, onDelete }) {
         <div className="review-list-item__right">
           <span className="review-list-item__badge review-list-item__badge--failed">Failed</span>
           <button
+            className="review-list-item__btn review-list-item__btn--retry"
+            onClick={handleRetryClick}
+            disabled={isRetrying}
+          >
+            {isRetrying ? 'Retrying…' : 'Retry'}
+          </button>
+          <button
             className="review-list-item__delete-btn review-list-item__delete-btn--visible"
             onClick={handleDeleteClick}
             aria-label={`Delete review for ${metadata?.advisor_name}`}
@@ -173,7 +192,7 @@ function ReviewListItem({ review, onClick, onDelete }) {
 
 // reviews: pre-filtered AND pre-sorted list from HistoryPage; rendered in order
 // hasAnyReviews: whether any reviews exist in the DB at all (for the empty-state copy)
-export default function ReviewList({ reviews, hasAnyReviews, onDelete }) {
+export default function ReviewList({ reviews, hasAnyReviews, onDelete, onRetry }) {
   const navigate = useNavigate()
 
   const ordered = reviews || []
@@ -208,6 +227,7 @@ export default function ReviewList({ reviews, hasAnyReviews, onDelete }) {
           review={review}
           onClick={review.status === 'complete' ? () => navigate(`/results/${review.id}`) : undefined}
           onDelete={onDelete}
+          onRetry={onRetry}
         />
       ))}
     </div>

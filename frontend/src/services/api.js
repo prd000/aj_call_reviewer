@@ -108,6 +108,18 @@ export async function deleteReview(id) {
   return handleResponse(response)
 }
 
+// Re-enqueue a FAILED review for reprocessing. Returns the full updated review
+// (status reset to 'pending'). The backend resumes from the transcript checkpoint
+// when present (skips Rev.ai), otherwise re-transcribes from the kept recording.
+export async function retryReview(id) {
+  const headers = await authHeaders()
+  const response = await apiFetch(`${BASE_URL}/reviews/${id}/retry`, {
+    method: 'POST',
+    headers,
+  })
+  return handleResponse(response)
+}
+
 // Pass `null` to clear the outcome. Returns the full updated review.
 export async function updateReviewOutcome(id, callOutcome) {
   const headers = { ...(await authHeaders()), 'Content-Type': 'application/json' }

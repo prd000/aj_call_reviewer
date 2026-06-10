@@ -22,20 +22,19 @@ def _get_stuck_threshold_seconds() -> int:
     return max(1, val)
 
 
-async def _mark_failed_and_cleanup(review_id: str, error_message: str, *, guard_terminal: bool = False) -> None:
+async def _mark_review_failed(review_id: str, error_message: str, *, guard_terminal: bool = False) -> None:
+    # Mark the review failed but KEEP its recording so it stays retryable. The
+    # recording is deleted only once transcription succeeds and the transcript is
+    # checkpointed (see _run): a transcription-phase failure therefore still has
+    # its audio for a re-transcribe, and a review-phase failure already has its
+    # transcript and never needs the audio again.
     await storage.update_review_status(review_id, "failed", error_message=error_message, guard_terminal=guard_terminal)
-    try:
-        r = await storage.get_review(review_id)
-        if r and r.get("storage_path"):
-            await storage.delete_recording_from_storage(r["storage_path"])
-    except Exception:
-        pass
 
 
 def _fail_in_new_loop(review_id: str, error_message: str, *, guard_terminal: bool = False) -> None:
     _supabase_client._client = None
     try:
-        asyncio.run(_mark_failed_and_cleanup(review_id, error_message, guard_terminal=guard_terminal))
+        asyncio.run(_mark_review_failed(review_id, error_message, guard_terminal=guard_terminal))
     except Exception:
         pass
 
@@ -93,6 +92,12 @@ def process_review_task(self, review_id: str, template_id: str):
             # "reviewing" + no transcript and re-submit Rev.ai, defeating the fix.
             await storage.update_review_transcript(review_id, transcript, speaker_map)
             logger.info("Transcript checkpoint persisted for review %s", review_id)
+            # Recording is disposable once the transcript is checkpointed — a retry
+            # resumes from the transcript, never the audio. Delete it HERE (not on
+            # complete/failed) so a transcription-phase failure keeps its recording
+            # and stays retryable. Non-fatal: silent if already removed.
+            await storage.delete_recording_from_storage(review["storage_path"])
+            logger.info("Recording deleted post-transcription for review %s", review_id)
 
         await storage.update_review_status(review_id, "reviewing", guard_terminal=True)
 
@@ -132,7 +137,9 @@ def process_review_task(self, review_id: str, template_id: str):
             logger.warning("Major focus generation failed for review %s: %s", review_id, exc)
 
         await storage.save_review(review)
-        await storage.delete_recording_from_storage(review["storage_path"])
+        # The recording was already deleted right after the transcript checkpoint
+        # (or in a prior attempt on the resume path), so there's nothing to clean
+        # up here on completion.
 
     try:
         asyncio.run(_run())
@@ -179,7 +186,7 @@ def reap_stuck_reviews(self):
             rid = row["id"]
             old_status = row.get("status", "unknown")
             try:
-                await _mark_failed_and_cleanup(
+                await _mark_review_failed(
                     rid,
                     f"Auto-failed by stuck-review reaper: no progress for >{threshold}s (was '{old_status}')",
                     guard_terminal=True,

@@ -19,8 +19,10 @@ from modules.storage import (
     list_reviews,
     update_review_major_focus,
     update_review_outcome,
+    update_review_status,
 )
 from modules.user_profiles import list_bds_reps, list_profiles_by_ids
+from tasks import process_review_task
 
 logger = logging.getLogger(__name__)
 
@@ -321,6 +323,46 @@ async def download_review_pdf(review_id: str, user: dict = Depends(get_current_u
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.post("/reviews/{review_id}/retry")
+async def retry_review_by_id(review_id: str, user: dict = Depends(get_current_user)):
+    review = await get_review(review_id)
+    if review is None:
+        raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
+    if user["role"] == "financial_advisor" and not _fa_can_access(review, user):
+        raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
+
+    if review.get("status") != "failed":
+        raise HTTPException(status_code=400, detail="Only failed reviews can be retried.")
+
+    # The template the review was processed with. Persisted at upload (the retry
+    # migration); falls back to the framework snapshot for any record that once
+    # completed. Legacy pre-migration failures have neither — re-upload instead.
+    template_id = review.get("template_id") or (review.get("framework") or {}).get("template_id")
+    if not template_id:
+        raise HTTPException(
+            status_code=400,
+            detail="This review predates retry support and can't be resubmitted. Please re-upload the call.",
+        )
+
+    # Mirror the upload enqueue: re-queue, then flip to pending + clear the prior
+    # error. The task resumes from the transcript checkpoint when present (skips
+    # Rev.ai); otherwise it re-transcribes from the still-present recording.
+    try:
+        task = process_review_task.delay(review_id, template_id)
+        await update_review_status(
+            review_id, "pending", celery_task_id=task.id, clear_error_message=True
+        )
+    except Exception as exc:
+        logger.error("Failed to enqueue retry for review %s: %s", review_id, exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Couldn't queue the review for reprocessing. The task queue may be unavailable.",
+        )
+
+    logger.info("Re-enqueued review %s for retry (template: %s)", review_id, template_id)
+    return await get_review(review_id)
 
 
 @router.delete("/reviews/{review_id}", status_code=204)

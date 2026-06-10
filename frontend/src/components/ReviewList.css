@@ -249,6 +249,16 @@
   background-color: var(--color-hairline);
 }
 
+/* Retry button on failed rows — info-accented, distinct from the destructive delete */
+.review-list-item__btn--retry {
+  background-color: rgba(59, 130, 246, 0.14);
+  color: var(--color-info);
+}
+
+.review-list-item__btn--retry:hover:not(:disabled) {
+  background-color: rgba(59, 130, 246, 0.24);
+}
+
 /* In-progress state — no interaction at all */
 .review-list-item--in-progress {
   cursor: default;

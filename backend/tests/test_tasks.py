@@ -22,7 +22,7 @@ import tasks as tasks_module
 from tasks import process_review_task, reap_stuck_reviews
 from modules import storage
 from celery_app import app
-from celery.exceptions import SoftTimeLimitExceeded
+from celery.exceptions import SoftTimeLimitExceeded, MaxRetriesExceededError
 
 
 # ---------------------------------------------------------------------------
@@ -299,7 +299,10 @@ def test_soft_time_limit_fails_fast_no_retry(monkeypatch):
     assert fake.row.get("status") == "failed"
     assert fake.row.get("error_message") is not None
     assert "soft time limit" in (fake.row.get("error_message") or "").lower()
-    assert _count(fake.events, "delete") == 1, "Recording should be deleted on soft-limit failure"
+    # The recording is deleted right after the transcript checkpoint (post-
+    # transcription), NOT by the failure path — _mark_review_failed keeps the row
+    # retryable. transcribe succeeded here, so exactly one (post-checkpoint) delete.
+    assert _count(fake.events, "delete") == 1
 
 
 # ---------------------------------------------------------------------------
@@ -342,8 +345,8 @@ def test_reap_stuck_reviews(monkeypatch):
     assert "rev-stuck-2" in status_writes
     assert status_writes["rev-stuck-2"]["status"] == "failed"
 
-    # Recording for rev-stuck-1 (has a storage_path) should be deleted
-    assert "rev-stuck-1/call.mp3" in deleted
+    # Reaper KEEPS the recording (no delete) so a reaped review stays retryable.
+    assert deleted == [], "Reaper must not delete recordings — reaped reviews stay retryable"
 
 
 # ---------------------------------------------------------------------------
@@ -373,3 +376,45 @@ def test_list_stuck_reviews_filters_server_side(monkeypatch):
     selected = select_calls[0][1]
     assert "transcript" not in selected
     assert "review_results" not in selected
+
+
+# ---------------------------------------------------------------------------
+# (j) Recording lifecycle: deleted post-transcription, KEPT on a transcription
+#     failure so Retry can re-transcribe (retry feature)
+# ---------------------------------------------------------------------------
+
+def test_recording_deleted_after_transcription_checkpoint(monkeypatch):
+    """On the happy path the recording is deleted right after the checkpoint
+    (post-transcription), not on completion."""
+    fake = FakeReviewDB()
+    transcribe = MagicMock(return_value=GOOD_TRANSCRIPT)
+    review_call = MagicMock(return_value=GOOD_REVIEW)
+    _install(monkeypatch, fake, transcribe=transcribe, review_call=review_call)
+
+    with patch.object(process_review_task, "retry", MagicMock(side_effect=_RetryAbort())):
+        assert _attempt() == "done"
+
+    assert fake.row["status"] == "complete"
+    assert _count(fake.events, "delete") == 1            # deleted exactly once...
+    # ...and the delete happened right after the checkpoint, before completion (save).
+    delete_index = next(i for i, (k, _) in enumerate(fake.events) if k == "delete")
+    cp_index = fake.events.index(("checkpoint", None))
+    save_index = next(i for i, (k, _) in enumerate(fake.events) if k == "save")
+    assert cp_index < delete_index < save_index
+
+
+def test_transcription_failure_keeps_recording(monkeypatch):
+    """A transcription-phase failure must KEEP the recording so Retry can
+    re-transcribe — the recording is only deleted after a successful checkpoint."""
+    fake = FakeReviewDB()
+    transcribe = MagicMock(side_effect=RuntimeError("revai down"))
+    review_call = MagicMock(return_value=GOOD_REVIEW)
+    _install(monkeypatch, fake, transcribe=transcribe, review_call=review_call)
+
+    with patch.object(process_review_task, "retry",
+                      MagicMock(side_effect=MaxRetriesExceededError())):
+        assert _attempt() == "done"   # retries exhausted -> marked failed
+
+    assert _count(fake.events, "checkpoint") == 0   # never reached the checkpoint
+    assert _count(fake.events, "delete") == 0       # recording KEPT for a future retry
+    assert fake.row["status"] == "failed"

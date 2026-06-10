@@ -4,9 +4,16 @@ import ReviewResults from '../components/ReviewResults'
 import ChatPanel from '../components/ChatPanel'
 import { useLoadingWatchdog } from '../hooks/useLoadingWatchdog'
 import { useAuth } from '../context/AuthContext'
-import { chatAboutReview, downloadReviewPdf, getReview, updateReviewMajorFocus, updateReviewOutcome } from '../services/api'
+import { chatAboutReview, downloadReviewPdf, getReview, retryReview, updateReviewMajorFocus, updateReviewOutcome } from '../services/api'
 import { downloadBlob } from '../lib/download'
 import './ResultsPage.css'
+
+const IN_PROGRESS_STATUSES = ['pending', 'transcribing', 'reviewing']
+const PROCESSING_LABELS = {
+  pending: 'Queued for processing…',
+  transcribing: 'Transcribing the call…',
+  reviewing: 'Generating the review…',
+}
 
 function RobotIcon() {
   // Inline SVG (repo uses inline glyphs, no icon library). Strokes use currentColor so the
@@ -49,6 +56,8 @@ export default function ResultsPage() {
   const [downloadError, setDownloadError] = useState(null)
   const [isGeneratingFocus, setIsGeneratingFocus] = useState(false)
   const [majorFocusError, setMajorFocusError] = useState(null)
+  const [isRetrying, setIsRetrying] = useState(false)
+  const [retryError, setRetryError] = useState(null)
   const transcriptRef = useRef(null)
   useLoadingWatchdog(isLoading, setIsLoading, { label: 'results' })
 
@@ -107,6 +116,19 @@ export default function ResultsPage() {
     }
   }
 
+  async function handleRetry() {
+    setRetryError(null)
+    setIsRetrying(true)
+    try {
+      const updated = await retryReview(id)
+      setReview(updated) // status is now 'pending' → the polling effect below kicks in
+    } catch (err) {
+      setRetryError(err.message || 'Failed to resubmit the review.')
+    } finally {
+      setIsRetrying(false)
+    }
+  }
+
   useEffect(() => {
     let isMounted = true
 
@@ -138,6 +160,29 @@ export default function ResultsPage() {
       isMounted = false
     }
   }, [id])
+
+  // Poll while the review is processing (e.g. right after a retry) so the page
+  // updates to the finished result without a manual refresh.
+  useEffect(() => {
+    if (!review || !IN_PROGRESS_STATUSES.includes(review.status)) return
+    let active = true
+    const interval = setInterval(async () => {
+      try {
+        const data = await getReview(id)
+        if (!active) return
+        setReview(data)
+        if (!IN_PROGRESS_STATUSES.includes(data.status)) {
+          clearInterval(interval)
+        }
+      } catch {
+        // silent — retries on next tick
+      }
+    }, 5000)
+    return () => {
+      active = false
+      clearInterval(interval)
+    }
+  }, [review?.status, id])
 
   const hasTranscript = Boolean(review?.transcript?.length)
 
@@ -186,18 +231,48 @@ export default function ResultsPage() {
                 </div>
               )}
             </div>
-            <ReviewResults
-              review={review}
-              onOutcomeChange={handleOutcomeChange}
-              isSavingOutcome={isSavingOutcome}
-              outcomeError={outcomeError}
-              transcriptRef={transcriptRef}
-              isBds={isBds}
-              majorFocus={review.major_focus}
-              onGenerateMajorFocus={handleGenerateMajorFocus}
-              isGeneratingFocus={isGeneratingFocus}
-              majorFocusError={majorFocusError}
-            />
+            {review.status === 'failed' ? (
+              <div className="results-page__failed" role="alert">
+                <span className="results-page__failed-icon" aria-hidden="true">&#9888;</span>
+                <div className="results-page__failed-body">
+                  <p className="results-page__failed-title">This review failed to process</p>
+                  <p className="results-page__failed-message">
+                    {review.error_message || 'An unexpected error occurred while processing this call.'}
+                  </p>
+                  <div className="results-page__failed-actions">
+                    <button
+                      className="results-page__retry-btn"
+                      onClick={handleRetry}
+                      disabled={isRetrying}
+                    >
+                      {isRetrying ? 'Resubmitting…' : 'Retry review'}
+                    </button>
+                  </div>
+                  {retryError && <p className="results-page__retry-error">{retryError}</p>}
+                </div>
+              </div>
+            ) : IN_PROGRESS_STATUSES.includes(review.status) ? (
+              <div className="results-page__processing">
+                <div className="results-page__spinner" aria-label="Processing review" />
+                <p className="results-page__processing-text">
+                  {PROCESSING_LABELS[review.status] || 'Processing…'}
+                </p>
+                <p className="results-page__processing-sub">This page updates automatically.</p>
+              </div>
+            ) : (
+              <ReviewResults
+                review={review}
+                onOutcomeChange={handleOutcomeChange}
+                isSavingOutcome={isSavingOutcome}
+                outcomeError={outcomeError}
+                transcriptRef={transcriptRef}
+                isBds={isBds}
+                majorFocus={review.major_focus}
+                onGenerateMajorFocus={handleGenerateMajorFocus}
+                isGeneratingFocus={isGeneratingFocus}
+                majorFocusError={majorFocusError}
+              />
+            )}
           </>
         )}
       </div>

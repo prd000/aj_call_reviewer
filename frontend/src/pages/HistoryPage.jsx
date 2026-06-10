@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ChatPanel from '../components/ChatPanel'
 import ReviewList from '../components/ReviewList'
 import SearchableSelect from '../components/SearchableSelect'
 import { useAuth } from '../context/AuthContext'
 import { useLoadingWatchdog } from '../hooks/useLoadingWatchdog'
 import { NO_OUTCOME, OUTCOME_FILTER_OPTIONS } from '../lib/outcomes'
-import { chatOverHistory, deleteReview, listFirms, listReviews } from '../services/api'
+import { chatOverHistory, deleteReview, listFirms, listReviews, retryReview } from '../services/api'
 import './HistoryPage.css'
 
 const IN_PROGRESS_STATUSES = ['pending', 'transcribing', 'reviewing']
@@ -210,31 +210,44 @@ export default function HistoryPage() {
     setFilterDateTo('')
   }
 
+  // Restart-able polling: also kicked off by a retry, which puts a review back in
+  // progress after the initial fetch may have already stopped the poll.
+  const startPolling = useCallback(() => {
+    if (pollingRef.current) return
+    pollingRef.current = setInterval(async () => {
+      try {
+        const data = await listReviews()
+        setReviews(data)
+        if (!data.some((r) => IN_PROGRESS_STATUSES.includes(r.status))) {
+          clearInterval(pollingRef.current)
+          pollingRef.current = null
+        }
+      } catch {
+        // silent — retries on next tick
+      }
+    }, 5000)
+  }, [])
+
   async function handleDelete(id) {
     await deleteReview(id)
     setReviews((prev) => prev.filter((r) => r.id !== id))
   }
 
+  async function handleRetry(id) {
+    await retryReview(id)
+    // Optimistically flip the row to in-progress; polling refreshes the real summary.
+    setReviews((prev) =>
+      prev.map((r) =>
+        r.id === id
+          ? { ...r, status: 'pending', overall_score: null, overall_max_score: null }
+          : r
+      )
+    )
+    startPolling()
+  }
+
   useEffect(() => {
     let isMounted = true
-
-    function startPolling() {
-      if (pollingRef.current) return
-      pollingRef.current = setInterval(async () => {
-        if (!isMounted) return
-        try {
-          const data = await listReviews()
-          if (!isMounted) return
-          setReviews(data)
-          if (!data.some((r) => IN_PROGRESS_STATUSES.includes(r.status))) {
-            clearInterval(pollingRef.current)
-            pollingRef.current = null
-          }
-        } catch {
-          // silent — retries on next tick
-        }
-      }, 5000)
-    }
 
     async function fetchAll() {
       setIsLoading(true)
@@ -265,7 +278,7 @@ export default function HistoryPage() {
         pollingRef.current = null
       }
     }
-  }, [isBds])
+  }, [isBds, startPolling])
 
   const chatSubtitle = `Asking about ${visibleIds.length} call${visibleIds.length === 1 ? '' : 's'} matching your filters`
 
@@ -504,6 +517,7 @@ export default function HistoryPage() {
             reviews={visibleReviews}
             hasAnyReviews={reviews.length > 0}
             onDelete={handleDelete}
+            onRetry={handleRetry}
           />
         )}
       </div>

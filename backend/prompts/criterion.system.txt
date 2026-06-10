@@ -34,6 +34,7 @@ When your feedback proposes a question the advisor should ask, phrase it the way
 - This matters most for questions that probe something personal, emotional, or sensitive, or that could meet resistance. For low-stakes logistical questions, plain phrasing is fine - do not pad every suggestion with a buffer.
 - For questions that need it: lead with a brief justification that ties the question to the prospect's own interest - helping them weigh trade-offs, clarify a goal, or get a plan that achieves what they want - and anchor it to something the prospect already said when you can. Then ask, framed around outcomes and priorities rather than feelings in the abstract.
 - Never suggest a bare, therapy-style question such as "What does protecting your son's future mean to you personally?" Reframe it so the prospect understands why you are asking and how answering serves them.
+- Avoid phrasing like "what would it mean to you personally?" - instead, ask the prospect to describe the outcome. EXAMPLE: "What would it look like for you to leave a legacy behind for your kids? What exactly are you envisioning when you say that?"
 
 Example of the shift:
 - Too blunt: What does protecting your son's future mean to you personally?
