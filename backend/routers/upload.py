@@ -92,6 +92,9 @@ async def upload_call(
     record["firm_id"] = effective_firm_id
     record["uploaded_by"] = user["user_id"]
     record["uploader_role"] = effective_uploader_role
+    # Persist the template so a later Retry can re-enqueue with the same framework
+    # even after a failure (a failed review's `framework` snapshot is still null).
+    record["template_id"] = effective_template_id
 
     file_bytes = await file.read()
 

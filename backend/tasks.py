@@ -1,7 +1,9 @@
 import asyncio
 import logging
+import os
+from datetime import datetime, timezone, timedelta
 
-from celery.exceptions import MaxRetriesExceededError
+from celery.exceptions import MaxRetriesExceededError, SoftTimeLimitExceeded
 
 from celery_app import app
 from modules import storage, transcriber, reviewer
@@ -9,6 +11,32 @@ from modules.templates import get_template
 import modules.supabase_client as _supabase_client
 
 logger = logging.getLogger(__name__)
+
+
+def _get_stuck_threshold_seconds() -> int:
+    raw = os.environ.get("STUCK_REVIEW_THRESHOLD_SECONDS", "").strip()
+    try:
+        val = int(raw) if raw else 5400
+    except ValueError:
+        val = 5400
+    return max(1, val)
+
+
+async def _mark_review_failed(review_id: str, error_message: str, *, guard_terminal: bool = False) -> None:
+    # Mark the review failed but KEEP its recording so it stays retryable. The
+    # recording is deleted only once transcription succeeds and the transcript is
+    # checkpointed (see _run): a transcription-phase failure therefore still has
+    # its audio for a re-transcribe, and a review-phase failure already has its
+    # transcript and never needs the audio again.
+    await storage.update_review_status(review_id, "failed", error_message=error_message, guard_terminal=guard_terminal)
+
+
+def _fail_in_new_loop(review_id: str, error_message: str, *, guard_terminal: bool = False) -> None:
+    _supabase_client._client = None
+    try:
+        asyncio.run(_mark_review_failed(review_id, error_message, guard_terminal=guard_terminal))
+    except Exception:
+        pass
 
 
 @app.task(bind=True, max_retries=2, default_retry_delay=10)
@@ -64,6 +92,12 @@ def process_review_task(self, review_id: str, template_id: str):
             # "reviewing" + no transcript and re-submit Rev.ai, defeating the fix.
             await storage.update_review_transcript(review_id, transcript, speaker_map)
             logger.info("Transcript checkpoint persisted for review %s", review_id)
+            # Recording is disposable once the transcript is checkpointed — a retry
+            # resumes from the transcript, never the audio. Delete it HERE (not on
+            # complete/failed) so a transcription-phase failure keeps its recording
+            # and stays retryable. Non-fatal: silent if already removed.
+            await storage.delete_recording_from_storage(review["storage_path"])
+            logger.info("Recording deleted post-transcription for review %s", review_id)
 
         await storage.update_review_status(review_id, "reviewing", guard_terminal=True)
 
@@ -103,10 +137,24 @@ def process_review_task(self, review_id: str, template_id: str):
             logger.warning("Major focus generation failed for review %s: %s", review_id, exc)
 
         await storage.save_review(review)
-        await storage.delete_recording_from_storage(review["storage_path"])
+        # The recording was already deleted right after the transcript checkpoint
+        # (or in a prior attempt on the resume path), so there's nothing to clean
+        # up here on completion.
 
     try:
         asyncio.run(_run())
+    except SoftTimeLimitExceeded:
+        # Celery raised SoftTimeLimitExceeded: the task ran past task_soft_time_limit.
+        # Write failed immediately — do NOT retry (retrying re-runs the same long work
+        # and re-hangs). This breaks the silent redelivery loop for stuck reviews.
+        logger.error(
+            "Soft time limit exceeded for review %s — marking failed, no retry",
+            review_id,
+        )
+        _fail_in_new_loop(
+            review_id,
+            f"Task exceeded soft time limit of {app.conf.task_soft_time_limit}s",
+        )
     except Exception as exc:
         logger.error(
             "Task failed for review %s (attempt %s/%s): %s",
@@ -121,18 +169,35 @@ def process_review_task(self, review_id: str, template_id: str):
             self.retry(exc=exc)
         except MaxRetriesExceededError:
             logger.error("Max retries exceeded for review %s, marking as failed.", review_id)
+            _fail_in_new_loop(review_id, str(exc))
 
-            async def _cleanup():
-                _supabase_client._client = None
-                await storage.update_review_status(review_id, "failed", error_message=str(exc))
-                try:
-                    r = await storage.get_review(review_id)
-                    if r and r.get("storage_path"):
-                        await storage.delete_recording_from_storage(r["storage_path"])
-                except Exception:
-                    pass
 
+@app.task(bind=True)
+def reap_stuck_reviews(self):
+    threshold = _get_stuck_threshold_seconds()
+
+    async def _run():
+        _supabase_client._client = None
+        cutoff = (datetime.now(timezone.utc) - timedelta(seconds=threshold)).isoformat()
+        stuck = await storage.list_stuck_reviews(cutoff)
+        logger.warning("Stuck-review reaper: found %d candidate(s) older than %ds", len(stuck), threshold)
+        reaped = 0
+        for row in stuck:
+            rid = row["id"]
+            old_status = row.get("status", "unknown")
             try:
-                asyncio.run(_cleanup())
-            except Exception:
-                pass
+                await _mark_review_failed(
+                    rid,
+                    f"Auto-failed by stuck-review reaper: no progress for >{threshold}s (was '{old_status}')",
+                    guard_terminal=True,
+                )
+                reaped += 1
+                logger.warning("Reaper: marked review %s failed (was '%s')", rid, old_status)
+            except Exception as exc:
+                logger.error("Reaper: failed to mark review %s: %s", rid, exc, exc_info=True)
+        logger.warning("Stuck-review reaper: reaped %d/%d", reaped, len(stuck))
+
+    try:
+        asyncio.run(_run())
+    except Exception as exc:
+        logger.error("Stuck-review reaper crashed: %s", exc, exc_info=True)

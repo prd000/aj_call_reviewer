@@ -5,6 +5,14 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
+# Time-limit ordering invariant (must be maintained if any of these are tuned):
+#   1800 (transcription poll ceiling) < soft (3000) < hard (3300) < 3600 (visibility_timeout)
+# Soft too low kills legitimate long transcriptions; both must stay under visibility_timeout
+# so a hard-killed task redelivers rather than double-runs (safe because the task is idempotent).
+# See also: transcriber._POLL_MAX_ATTEMPTS * _POLL_INTERVAL_SECONDS = 1800s.
+_SOFT_TIME_LIMIT = int(os.environ.get("CELERY_TASK_SOFT_TIME_LIMIT", "3000"))
+_HARD_TIME_LIMIT = int(os.environ.get("CELERY_TASK_TIME_LIMIT", "3300"))
+
 app = Celery(
     "call_reviewer",
     broker=os.environ.get("REDIS_URL", "redis://localhost:6379/0"),
@@ -32,4 +40,20 @@ app.conf.update(
     # Long-running tasks: don't let a busy worker reserve a backlog it can't
     # process within the visibility window.
     worker_prefetch_multiplier=1,
+    # Backstop time limits — catches a hung LLM or Rev.ai call that Part A's
+    # per-request timeout misses (e.g. the rev_ai SDK has no built-in timeout).
+    # Soft fires SoftTimeLimitExceeded; task handler writes failed + no retry.
+    # Hard SIGKILL is a last resort.
+    task_soft_time_limit=_SOFT_TIME_LIMIT,
+    task_time_limit=_HARD_TIME_LIMIT,
+    # Reaper: mark stuck in-progress reviews failed every 10 minutes.
+    # Run beat embedded in the worker (-B flag in Procfile).
+    # If worker replicas are ever scaled > 1, split beat into its own
+    # single-replica service to avoid duplicate scheduling.
+    beat_schedule={
+        "reap-stuck-reviews": {
+            "task": "tasks.reap_stuck_reviews",
+            "schedule": float(os.environ.get("REAP_INTERVAL_SECONDS", "600")),
+        },
+    },
 )

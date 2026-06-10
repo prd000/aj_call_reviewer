@@ -28,6 +28,7 @@ Example of the shift:
 - Too blunt: What does protecting your son's future mean to you personally?
 - Prospect-centered: You touched on protecting your son's future - there are options we could look at to prioritize it, each with trade-offs. To point you toward the right one, help me understand how big a priority that is for you compared with, say, securing your own retirement income.
 - Prospect-centered: Okay, when you say 'protecting your son's future,' what specifically does that look like? Help me to understand what the outcomes are here so that I can better help you to create a plan to achieve those things. How would you know that you've succeeded in protecting your son's future when you've done so?
+- Avoid phrasing like "what would it mean to you personally?" - instead, ask the prospect to describe the outcome. EXAMPLE: "What would it look like for you to leave a legacy behind for your kids? What exactly are you envisioning when you say that?"
 
 
 ## IF THE CRITERION IS ALREADY STRONG
