@@ -5,7 +5,7 @@ import ChatPanel from '../components/ChatPanel'
 import NotesModal from '../components/NotesModal'
 import { useLoadingWatchdog } from '../hooks/useLoadingWatchdog'
 import { useAuth } from '../context/AuthContext'
-import { chatAboutReview, createTag, downloadReviewPdf, getReview, getTags, retryReview, updateReviewMajorFocus, updateReviewNotes, updateReviewOutcome, updateReviewTags } from '../services/api'
+import { chatAboutReview, downloadReviewPdf, getReview, getTags, retryReview, updateReviewMajorFocus, updateReviewNotes, updateReviewOutcome, updateReviewTags } from '../services/api'
 import { downloadBlob } from '../lib/download'
 import './ResultsPage.css'
 
