@@ -1,4 +1,5 @@
 import asyncio
+import concurrent.futures
 import logging
 import os
 from datetime import datetime, timezone, timedelta
@@ -13,13 +14,56 @@ import modules.supabase_client as _supabase_client
 logger = logging.getLogger(__name__)
 
 
-def _get_stuck_threshold_seconds() -> int:
-    raw = os.environ.get("STUCK_REVIEW_THRESHOLD_SECONDS", "").strip()
+def _get_stuck_threshold_seconds(status: str) -> int:
+    """Return the stuck-detection threshold (seconds) for a given in-progress status.
+
+    STUCK_REVIEW_THRESHOLD_SECONDS (old single-threshold env var) is intentionally
+    NOT read here; honoring it would re-introduce the single-threshold bug where the
+    conservative transcription ceiling inflates the reviewing threshold.
+    """
+    defaults = {
+        "pending": ("STUCK_PENDING_THRESHOLD_SECONDS", 300),
+        "transcribing": ("STUCK_TRANSCRIBING_THRESHOLD_SECONDS", 2100),
+        "reviewing": ("STUCK_REVIEWING_THRESHOLD_SECONDS", 720),
+    }
+    env_var, default = defaults.get(status, ("", 720))
+    if not env_var:
+        return default
+    raw = os.environ.get(env_var, "").strip()
     try:
-        val = int(raw) if raw else 5400
+        val = int(raw) if raw else default
     except ValueError:
-        val = 5400
+        val = default
     return max(1, val)
+
+
+def _get_review_phase_timeout_seconds() -> int:
+    raw = os.environ.get("REVIEW_PHASE_TIMEOUT_SECONDS", "").strip()
+    try:
+        val = int(raw) if raw else 240
+    except ValueError:
+        val = 240
+    return max(1, val)
+
+
+def _review_call_with_timeout(transcript, criteria, timeout_s: int):
+    """Run reviewer.review_call in a thread with a hard wall-clock timeout.
+
+    Uses ThreadPoolExecutor so the timeout is cross-platform (Windows dev +
+    Linux/Railway prod). Trade-off: on TimeoutError the worker thread is orphaned
+    and keeps running until the LLM's own 120s timeout (+1 internal retry ≈ 240s)
+    fires. The Celery task slot is freed immediately because the task raises and acks.
+    """
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+        future = ex.submit(reviewer.review_call, transcript, criteria)
+        try:
+            return future.result(timeout=timeout_s)
+        except concurrent.futures.TimeoutError:
+            # Don't block waiting for the orphan thread; let it time out on its own.
+            ex.shutdown(wait=False)
+            raise TimeoutError(
+                f"review_call exceeded the {timeout_s}s per-attempt timeout"
+            )
 
 
 async def _mark_review_failed(review_id: str, error_message: str, *, guard_terminal: bool = False) -> None:
@@ -47,9 +91,6 @@ def process_review_task(self, review_id: str, template_id: str):
         # closed loop raises "Event loop is closed" errors in httpx.
         _supabase_client._client = None
 
-        template = await get_template(template_id)
-        criteria = template["criteria"]
-
         # Fetch the review BEFORE any status write so the idempotency guard and
         # the checkpoint/resume decision can run without first regressing status.
         review = await storage.get_review(review_id)
@@ -57,6 +98,24 @@ def process_review_task(self, review_id: str, template_id: str):
             logger.error("Review %s not found in database — marking failed, no retry", review_id)
             await storage.update_review_status(review_id, "failed", error_message="Review record not found in database")
             return
+
+        # Prefer the framework snapshot saved at upload (Bug #2 fix: framework is
+        # now written at upload, not only on completion). Fall back to fetching the
+        # template live for legacy rows that predate the upload-time framework save.
+        framework = review.get("framework") or {}
+        criteria = framework.get("criteria")
+        template_name = framework.get("template_name", "")
+        if not criteria:
+            template = await get_template(template_id)
+            if not template:
+                logger.error("Review %s has no persisted framework and template %s not found", review_id, template_id)
+                await storage.update_review_status(
+                    review_id, "failed",
+                    error_message="Template not found and no persisted framework"
+                )
+                return
+            criteria = template["criteria"]
+            template_name = template.get("name", "")
 
         # Idempotency guard: never reprocess a finished review. Protects against a
         # duplicate/late delivery or a retry that fires after a successful complete.
@@ -102,14 +161,15 @@ def process_review_task(self, review_id: str, template_id: str):
         await storage.update_review_status(review_id, "reviewing", guard_terminal=True)
 
         logger.info("Starting review generation for review %s", review_id)
-        review_data = reviewer.review_call(transcript, criteria)
+        review_timeout = _get_review_phase_timeout_seconds()
+        review_data = _review_call_with_timeout(transcript, criteria, review_timeout)
         logger.info("Review generation complete for review %s", review_id)
 
         review["transcript"] = transcript
         review["speaker_map"] = speaker_map
         review["review"] = review_data
         review["framework"] = {
-            "template_name": template.get("name", ""),
+            "template_name": template_name,
             "template_id": template_id,
             "criteria": criteria,
         }
@@ -174,28 +234,34 @@ def process_review_task(self, review_id: str, template_id: str):
 
 @app.task(bind=True)
 def reap_stuck_reviews(self):
-    threshold = _get_stuck_threshold_seconds()
-
     async def _run():
         _supabase_client._client = None
-        cutoff = (datetime.now(timezone.utc) - timedelta(seconds=threshold)).isoformat()
-        stuck = await storage.list_stuck_reviews(cutoff)
-        logger.warning("Stuck-review reaper: found %d candidate(s) older than %ds", len(stuck), threshold)
-        reaped = 0
-        for row in stuck:
-            rid = row["id"]
-            old_status = row.get("status", "unknown")
-            try:
-                await _mark_review_failed(
-                    rid,
-                    f"Auto-failed by stuck-review reaper: no progress for >{threshold}s (was '{old_status}')",
-                    guard_terminal=True,
-                )
-                reaped += 1
-                logger.warning("Reaper: marked review %s failed (was '%s')", rid, old_status)
-            except Exception as exc:
-                logger.error("Reaper: failed to mark review %s: %s", rid, exc, exc_info=True)
-        logger.warning("Stuck-review reaper: reaped %d/%d", reaped, len(stuck))
+        total_stuck = 0
+        total_reaped = 0
+        for status in storage.IN_PROGRESS_STATUSES:
+            threshold = _get_stuck_threshold_seconds(status)
+            cutoff = (datetime.now(timezone.utc) - timedelta(seconds=threshold)).isoformat()
+            stuck = await storage.list_stuck_reviews(cutoff, statuses=(status,))
+            if not stuck:
+                continue
+            logger.warning(
+                "Stuck-review reaper: found %d '%s' candidate(s) older than %ds",
+                len(stuck), status, threshold,
+            )
+            total_stuck += len(stuck)
+            for row in stuck:
+                rid = row["id"]
+                try:
+                    await _mark_review_failed(
+                        rid,
+                        f"Auto-failed by stuck-review reaper: no progress for >{threshold}s (was '{status}')",
+                        guard_terminal=True,
+                    )
+                    total_reaped += 1
+                    logger.warning("Reaper: marked review %s failed (was '%s')", rid, status)
+                except Exception as exc:
+                    logger.error("Reaper: failed to mark review %s: %s", rid, exc, exc_info=True)
+        logger.warning("Stuck-review reaper: reaped %d/%d across all statuses", total_reaped, total_stuck)
 
     try:
         asyncio.run(_run())

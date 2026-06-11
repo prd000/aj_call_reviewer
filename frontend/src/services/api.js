@@ -161,6 +161,44 @@ export async function downloadReviewPdf(id) {
   return response.blob()
 }
 
+// Pass an array of tag IDs to replace the review's tags. Returns the full updated review.
+export async function updateReviewTags(id, tagIds) {
+  const headers = { ...(await authHeaders()), 'Content-Type': 'application/json' }
+  const response = await apiFetch(`${BASE_URL}/reviews/${id}/tags`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ tag_ids: tagIds }),
+  })
+  return handleResponse(response)
+}
+
+// Pass null or empty string to clear notes. Returns the full updated review.
+export async function updateReviewNotes(id, notes) {
+  const headers = { ...(await authHeaders()), 'Content-Type': 'application/json' }
+  const response = await apiFetch(`${BASE_URL}/reviews/${id}/notes`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ notes: notes || null }),
+  })
+  return handleResponse(response)
+}
+
+export async function getTags() {
+  const headers = await authHeaders()
+  const response = await apiFetch(`${BASE_URL}/tags`, { headers })
+  return handleResponse(response)
+}
+
+export async function createTag(name) {
+  const headers = { ...(await authHeaders()), 'Content-Type': 'application/json' }
+  const response = await apiFetch(`${BASE_URL}/tags`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ name }),
+  })
+  return handleResponse(response)
+}
+
 export async function chatAboutReview(id, messages) {
   const headers = { ...(await authHeaders()), 'Content-Type': 'application/json' }
   const response = await apiFetch(

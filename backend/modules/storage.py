@@ -33,6 +33,8 @@ def _to_row(review: dict) -> dict:
         "uploader_role": review.get("uploader_role"),
         "major_focus": review.get("major_focus"),
         "template_id": review.get("template_id"),
+        "tag_ids": review.get("tag_ids", []),
+        "notes": review.get("notes"),
     }
 
 
@@ -61,6 +63,8 @@ def _from_row(row: dict) -> dict:
         "uploader_role": row.get("uploader_role"),
         "major_focus": row.get("major_focus"),
         "template_id": row.get("template_id"),
+        "tag_ids": row.get("tag_ids") or [],
+        "notes": row.get("notes"),
     }
 
 
@@ -241,6 +245,21 @@ def save_recording(review_id: str, file_bytes: bytes, filename: str) -> Path:
     recording_path = RECORDINGS_DIR / f"{review_id}_{safe_filename}"
     recording_path.write_bytes(file_bytes)
     return recording_path
+
+
+async def update_review_tags(review_id: str, tag_ids: list[str]) -> None:
+    """Replace the tag_ids array on a review."""
+    client = await get_client()
+    await client.table("reviews").update({"tag_ids": tag_ids}).eq("id", review_id).execute()
+
+
+async def update_review_notes(review_id: str, notes: str | None) -> None:
+    """Set or clear the internal notes on a review.
+
+    Always writes the key so passing None clears back to NULL.
+    """
+    client = await get_client()
+    await client.table("reviews").update({"notes": notes}).eq("id", review_id).execute()
 
 
 def delete_recording(review_id: str, original_filename: str) -> bool:

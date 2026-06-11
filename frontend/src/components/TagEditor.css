@@ -1,0 +1,123 @@
+.tag-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.tag-editor__label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.tag-editor__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xxs);
+}
+
+.tag-editor__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px 3px 10px;
+  background-color: var(--color-surface-elevated);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-pill);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-body);
+}
+
+.tag-editor__chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--color-muted);
+  cursor: pointer;
+  padding: 0;
+  font-size: 10px;
+  line-height: 1;
+  transition: color var(--transition-fast);
+}
+
+.tag-editor__chip-remove:hover:not(:disabled) {
+  color: var(--color-danger);
+}
+
+.tag-editor__chip-remove:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tag-editor__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  align-items: center;
+}
+
+.tag-editor__create {
+  display: flex;
+  gap: var(--space-xxs);
+  align-items: center;
+}
+
+.tag-editor__input {
+  background-color: var(--color-surface-elevated);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-md);
+  color: var(--color-body);
+  font-size: 13px;
+  padding: 5px 10px;
+  width: 160px;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.tag-editor__input::placeholder {
+  color: var(--color-muted);
+}
+
+.tag-editor__input:focus {
+  border-color: var(--color-primary);
+}
+
+.tag-editor__input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tag-editor__add-btn {
+  background-color: var(--color-surface-elevated);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-md);
+  color: var(--color-body);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+  white-space: nowrap;
+}
+
+.tag-editor__add-btn:hover:not(:disabled) {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.tag-editor__add-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.tag-editor__error {
+  font-size: 12px;
+  color: var(--color-danger);
+  margin: 0;
+}

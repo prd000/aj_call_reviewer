@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
 from modules.auth import get_current_user
 from modules.firms import get_firm
 from modules.ingestion import CALL_OUTCOMES, create_record, validate_file
+from modules.templates import get_template
 from modules.storage import (
     delete_recording_from_storage,
     save_review,
@@ -92,9 +93,19 @@ async def upload_call(
     record["firm_id"] = effective_firm_id
     record["uploaded_by"] = user["user_id"]
     record["uploader_role"] = effective_uploader_role
-    # Persist the template so a later Retry can re-enqueue with the same framework
-    # even after a failure (a failed review's `framework` snapshot is still null).
-    record["template_id"] = effective_template_id
+
+    # Build and persist the full framework snapshot at upload time so every review
+    # carries its criteria from the start — even failed/in-progress rows. This makes
+    # `framework` the single source of truth; the standalone `template_id` column is
+    # no longer populated for new rows (kept nullable for legacy backward-compat).
+    template = await get_template(effective_template_id)
+    if template is None:
+        raise HTTPException(status_code=400, detail="Review template not found.")
+    record["framework"] = {
+        "template_name": template.get("name", ""),
+        "template_id": effective_template_id,
+        "criteria": template.get("criteria", []),
+    }
 
     file_bytes = await file.read()
 
