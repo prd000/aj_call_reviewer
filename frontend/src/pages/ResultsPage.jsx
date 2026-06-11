@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import ReviewResults from '../components/ReviewResults'
 import ChatPanel from '../components/ChatPanel'
+import NotesModal from '../components/NotesModal'
 import { useLoadingWatchdog } from '../hooks/useLoadingWatchdog'
 import { useAuth } from '../context/AuthContext'
-import { chatAboutReview, downloadReviewPdf, getReview, retryReview, updateReviewMajorFocus, updateReviewOutcome } from '../services/api'
+import { chatAboutReview, downloadReviewPdf, getReview, getTags, retryReview, updateReviewMajorFocus, updateReviewNotes, updateReviewOutcome, updateReviewTags } from '../services/api'
 import { downloadBlob } from '../lib/download'
 import './ResultsPage.css'
 
@@ -58,6 +59,12 @@ export default function ResultsPage() {
   const [majorFocusError, setMajorFocusError] = useState(null)
   const [isRetrying, setIsRetrying] = useState(false)
   const [retryError, setRetryError] = useState(null)
+  const [allTags, setAllTags] = useState([])
+  const [isSavingTags, setIsSavingTags] = useState(false)
+  const [tagError, setTagError] = useState(null)
+  const [isNotesOpen, setIsNotesOpen] = useState(false)
+  const [isSavingNotes, setIsSavingNotes] = useState(false)
+  const [notesError, setNotesError] = useState(null)
   const transcriptRef = useRef(null)
   useLoadingWatchdog(isLoading, setIsLoading, { label: 'results' })
 
@@ -129,6 +136,46 @@ export default function ResultsPage() {
     }
   }
 
+  async function handleTagsChange(newTagIds) {
+    const snapshot = review
+    setTagError(null)
+    setIsSavingTags(true)
+    setReview((prev) => ({ ...prev, tag_ids: newTagIds }))
+    try {
+      const updated = await updateReviewTags(id, newTagIds)
+      setReview(updated)
+    } catch (err) {
+      setReview(snapshot)
+      setTagError(err.message || 'Failed to update tags.')
+    } finally {
+      setIsSavingTags(false)
+    }
+  }
+
+  function handleTagCreated(tag) {
+    setAllTags((prev) => {
+      if (prev.some((t) => t.id === tag.id)) return prev
+      return [...prev, tag].sort((a, b) => a.name.localeCompare(b.name))
+    })
+  }
+
+  async function handleSaveNotes(newNotes) {
+    const snapshot = review
+    setNotesError(null)
+    setIsSavingNotes(true)
+    setReview((prev) => ({ ...prev, notes: newNotes }))
+    try {
+      const updated = await updateReviewNotes(id, newNotes)
+      setReview(updated)
+      setIsNotesOpen(false)
+    } catch (err) {
+      setReview(snapshot)
+      setNotesError(err.message || 'Failed to save notes.')
+    } finally {
+      setIsSavingNotes(false)
+    }
+  }
+
   useEffect(() => {
     let isMounted = true
 
@@ -160,6 +207,12 @@ export default function ResultsPage() {
       isMounted = false
     }
   }, [id])
+
+  // Load tag vocabulary once for BDS users.
+  useEffect(() => {
+    if (!isBds) return
+    getTags().then(setAllTags).catch(() => {})
+  }, [isBds])
 
   // Poll while the review is processing (e.g. right after a retry) so the page
   // updates to the finished result without a manual refresh.
@@ -218,6 +271,14 @@ export default function ResultsPage() {
               <h1 className="results-page__title">Call Review</h1>
               {review.status === 'complete' && review.review?.categories?.length > 0 && (
                 <div className="results-page__header-actions">
+                  {isBds && (
+                    <button
+                      className="results-page__notes-btn"
+                      onClick={() => { setNotesError(null); setIsNotesOpen(true) }}
+                    >
+                      {review.notes ? 'Edit Notes' : 'Add Notes'}
+                    </button>
+                  )}
                   <button
                     className="results-page__download-btn"
                     onClick={handleDownloadPdf}
@@ -271,6 +332,11 @@ export default function ResultsPage() {
                 onGenerateMajorFocus={handleGenerateMajorFocus}
                 isGeneratingFocus={isGeneratingFocus}
                 majorFocusError={majorFocusError}
+                allTags={allTags}
+                onTagsChange={handleTagsChange}
+                onTagCreated={handleTagCreated}
+                isSavingTags={isSavingTags}
+                tagError={tagError}
               />
             )}
           </>
@@ -296,6 +362,16 @@ export default function ResultsPage() {
             onClose={() => setIsChatOpen(false)}
             onTimestampClick={(ts) => transcriptRef.current?.jumpTo(ts)}
           />
+          {isBds && (
+            <NotesModal
+              isOpen={isNotesOpen}
+              onClose={() => setIsNotesOpen(false)}
+              initialNotes={review.notes}
+              onSave={handleSaveNotes}
+              isSaving={isSavingNotes}
+              saveError={notesError}
+            />
+          )}
         </>
       )}
     </div>

@@ -18,9 +18,12 @@ from modules.storage import (
     get_review,
     list_reviews,
     update_review_major_focus,
+    update_review_notes,
     update_review_outcome,
     update_review_status,
+    update_review_tags,
 )
+from modules.tags import list_tags
 from modules.user_profiles import list_bds_reps, list_profiles_by_ids
 from tasks import process_review_task
 
@@ -33,6 +36,7 @@ def _review_summary(
     review: dict,
     firm_rep_map: dict | None = None,
     uploader_map: dict | None = None,
+    tag_map: dict | None = None,
 ) -> dict:
     overall_score = None
     overall_max_score = None
@@ -56,6 +60,9 @@ def _review_summary(
         metadata["bds_rep_name"] = firm_rep_map.get(review.get("firm_id"))
     if uploader_map is not None:
         metadata["uploaded_by_name"] = uploader_map.get(review.get("uploaded_by"))
+    if tag_map is not None:
+        tag_ids = review.get("tag_ids") or []
+        metadata["tags"] = [tag_map[tid] for tid in tag_ids if tid in tag_map]
 
     return {
         "id": review["id"],
@@ -99,6 +106,14 @@ class MajorFocusBody(BaseModel):
     criterion_id: str
 
 
+class TagIdsBody(BaseModel):
+    tag_ids: list[str]
+
+
+class NotesBody(BaseModel):
+    notes: str | None = None
+
+
 class ChatMessage(BaseModel):
     role: Literal["user", "assistant"]
     content: str
@@ -137,7 +152,9 @@ async def get_reviews(user: dict = Depends(get_current_user)):
     all_reviews = await list_reviews()
     firm_rep_map = await _build_firm_bds_rep_map()
     uploader_map = await _build_uploader_name_map(all_reviews)
-    return [_review_summary(r, firm_rep_map, uploader_map) for r in all_reviews]
+    tags = await list_tags()
+    tag_map = {t["id"]: {"id": t["id"], "name": t["name"]} for t in tags}
+    return [_review_summary(r, firm_rep_map, uploader_map, tag_map) for r in all_reviews]
 
 
 @router.get("/reviews/{review_id}")
@@ -220,6 +237,32 @@ async def update_review_major_focus_by_id(
         "is_auto": False,
     }
     await update_review_major_focus(review_id, focus)
+    return await get_review(review_id)
+
+
+@router.patch("/reviews/{review_id}/tags")
+async def update_review_tags_by_id(
+    review_id: str,
+    body: TagIdsBody,
+    user: dict = Depends(require_bds_rep),
+):
+    review = await get_review(review_id)
+    if review is None:
+        raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
+    await update_review_tags(review_id, body.tag_ids)
+    return await get_review(review_id)
+
+
+@router.patch("/reviews/{review_id}/notes")
+async def update_review_notes_by_id(
+    review_id: str,
+    body: NotesBody,
+    user: dict = Depends(require_bds_rep),
+):
+    review = await get_review(review_id)
+    if review is None:
+        raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
+    await update_review_notes(review_id, body.notes or None)
     return await get_review(review_id)
 
 
@@ -336,11 +379,12 @@ async def retry_review_by_id(review_id: str, user: dict = Depends(get_current_us
     if review.get("status") != "failed":
         raise HTTPException(status_code=400, detail="Only failed reviews can be retried.")
 
-    # The template the review was processed with. Persisted at upload (the retry
-    # migration); falls back to the framework snapshot for any record that once
-    # completed. Legacy pre-migration failures have neither — re-upload instead.
-    template_id = review.get("template_id") or (review.get("framework") or {}).get("template_id")
-    if not template_id:
+    # Prefer the framework snapshot (now persisted at upload); fall back to the
+    # standalone template_id column for legacy rows that predate the upload-time
+    # framework save. Rows with neither predate retry support entirely.
+    framework = review.get("framework") or {}
+    template_id = framework.get("template_id") or review.get("template_id")
+    if not template_id and not framework.get("criteria"):
         raise HTTPException(
             status_code=400,
             detail="This review predates retry support and can't be resubmitted. Please re-upload the call.",

@@ -3,6 +3,7 @@ import ScoreCard from './ScoreCard'
 import TranscriptPanel from './TranscriptPanel'
 import FrameworkPanel from './FrameworkPanel'
 import SearchableSelect from './SearchableSelect'
+import TagEditor from './TagEditor'
 import { OUTCOME_OPTIONS } from '../lib/outcomes'
 import './ReviewResults.css'
 
@@ -48,6 +49,11 @@ export default function ReviewResults({
   onGenerateMajorFocus,
   isGeneratingFocus,
   majorFocusError,
+  allTags,
+  onTagsChange,
+  onTagCreated,
+  isSavingTags,
+  tagError,
 }) {
   const [selectedCriterionId, setSelectedCriterionId] = useState(majorFocus?.criterion_id || '')
   const { metadata, review: reviewData, transcript, speaker_map, framework, created_at } = review
@@ -160,6 +166,20 @@ export default function ReviewResults({
             {majorFocusError && (
               <span className="review-results__meta-error">{majorFocusError}</span>
             )}
+          </div>
+        )}
+
+        {/* Tags — BDS only */}
+        {isBds && (
+          <div className="review-results__tags">
+            <TagEditor
+              tagIds={review.tag_ids || []}
+              allTags={allTags || []}
+              onTagsChange={onTagsChange}
+              onTagCreated={onTagCreated}
+              disabled={isSavingTags}
+            />
+            {tagError && <p className="review-results__meta-error">{tagError}</p>}
           </div>
         )}
       </div>

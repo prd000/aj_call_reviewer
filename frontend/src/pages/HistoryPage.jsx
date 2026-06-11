@@ -98,6 +98,7 @@ export default function HistoryPage() {
   const [filterFirm, setFilterFirm] = useState([])
   useLoadingWatchdog(isLoading, setIsLoading, { label: 'history' })
   const [filterAdvisor, setFilterAdvisor] = useState([])
+  const [filterTag, setFilterTag] = useState([])
   const [filterTemplate, setFilterTemplate] = useState([])
   const [filterBdsRep, setFilterBdsRep] = useState([])
   const [filterUploader, setFilterUploader] = useState([])
@@ -145,6 +146,18 @@ export default function HistoryPage() {
     return [...new Set(names)].sort()
   }, [isBds, reviews])
 
+  // BDS-only tag filter options: deduplicated {id, name} objects from review tags.
+  const tagOptions = useMemo(() => {
+    if (!isBds) return []
+    const seen = new Map()
+    for (const r of reviews) {
+      for (const tag of r.metadata?.tags || []) {
+        if (!seen.has(tag.id)) seen.set(tag.id, tag)
+      }
+    }
+    return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name))
+  }, [isBds, reviews])
+
   // Lift filtering + sorting here so we can derive visibleIds for the history
   // chat and so ReviewList renders rows in the order it receives them.
   const visibleReviews = useMemo(() => {
@@ -155,6 +168,10 @@ export default function HistoryPage() {
       if (filterTemplate.length && !filterTemplate.includes(r.metadata?.template_name)) return false
       if (filterBdsRep.length && !filterBdsRep.includes(r.metadata?.bds_rep_name)) return false
       if (filterUploader.length && !filterUploader.includes(r.metadata?.uploaded_by_name)) return false
+      if (filterTag.length) {
+        const reviewTagIds = (r.metadata?.tags || []).map((t) => t.id)
+        if (!filterTag.some((id) => reviewTagIds.includes(id))) return false
+      }
       if (filterOutcome.length) {
         const oc = r.metadata?.call_outcome
         const matches = filterOutcome.some((sel) =>
@@ -183,7 +200,7 @@ export default function HistoryPage() {
       return true
     })
     return filtered.sort((a, b) => compareReviews(a, b, sortBy))
-  }, [reviews, filterFirm, filterAdvisor, filterTemplate, filterBdsRep, filterUploader, filterOutcome, filterDateFrom, filterDateTo, searchQuery, sortBy])
+  }, [reviews, filterFirm, filterAdvisor, filterTemplate, filterBdsRep, filterUploader, filterTag, filterOutcome, filterDateFrom, filterDateTo, searchQuery, sortBy])
 
   const visibleIds = useMemo(() => visibleReviews.map((r) => r.id), [visibleReviews])
 
@@ -195,6 +212,7 @@ export default function HistoryPage() {
     (filterTemplate.length > 0 ? 1 : 0) +
     (filterBdsRep.length > 0 ? 1 : 0) +
     (filterUploader.length > 0 ? 1 : 0) +
+    (filterTag.length > 0 ? 1 : 0) +
     (filterOutcome.length > 0 ? 1 : 0) +
     (filterDateFrom ? 1 : 0) +
     (filterDateTo ? 1 : 0)
@@ -205,6 +223,7 @@ export default function HistoryPage() {
     setFilterTemplate([])
     setFilterBdsRep([])
     setFilterUploader([])
+    setFilterTag([])
     setFilterOutcome([])
     setFilterDateFrom('')
     setFilterDateTo('')
@@ -476,6 +495,26 @@ export default function HistoryPage() {
                         ]}
                         value={filterUploader}
                         onChange={setFilterUploader}
+                        placeholder="All"
+                      />
+                    </div>
+                  )}
+
+                  {isBds && tagOptions.length > 0 && (
+                    <div className="history-page__filter history-page__filter--select">
+                      <label htmlFor="tag-filter" className="history-page__filter-label">
+                        Tags
+                      </label>
+                      <SearchableSelect
+                        id="tag-filter"
+                        size="sm"
+                        multiple
+                        options={[
+                          { value: '', label: 'All' },
+                          ...tagOptions.map((t) => ({ value: t.id, label: t.name })),
+                        ]}
+                        value={filterTag}
+                        onChange={setFilterTag}
                         placeholder="All"
                       />
                     </div>

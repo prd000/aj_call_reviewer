@@ -46,14 +46,20 @@ app.conf.update(
     # Hard SIGKILL is a last resort.
     task_soft_time_limit=_SOFT_TIME_LIMIT,
     task_time_limit=_HARD_TIME_LIMIT,
-    # Reaper: mark stuck in-progress reviews failed every 10 minutes.
+    # Reaper: mark stuck in-progress reviews failed every 2 minutes (120s).
+    # With STUCK_REVIEWING_THRESHOLD_SECONDS=720 (12 min), worst-case detection
+    # is ~14 min — inside the 15-min target. Cost is one indexed query per
+    # in-progress status per run; negligible.
+    # REVIEW_PHASE_TIMEOUT_SECONDS (default 240s) is the finer in-process bound
+    # that fires inside a worker long before the soft/hard Celery limits or the
+    # reaper; the reaper is a pure DB-state backstop for rows with no owning task.
     # Run beat embedded in the worker (-B flag in Procfile).
     # If worker replicas are ever scaled > 1, split beat into its own
     # single-replica service to avoid duplicate scheduling.
     beat_schedule={
         "reap-stuck-reviews": {
             "task": "tasks.reap_stuck_reviews",
-            "schedule": float(os.environ.get("REAP_INTERVAL_SECONDS", "600")),
+            "schedule": float(os.environ.get("REAP_INTERVAL_SECONDS", "120")),
         },
     },
 )

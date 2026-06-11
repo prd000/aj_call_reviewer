@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from modules.templates import migrate_default_template
-from routers import upload, reviews, templates, management
+from routers import upload, reviews, templates, management, tags
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
@@ -33,6 +33,7 @@ app.add_middleware(
 
 app.include_router(upload.router, prefix="/api")
 app.include_router(reviews.router, prefix="/api")
+app.include_router(tags.router, prefix="/api")
 app.include_router(templates.router, prefix="/api")
 app.include_router(management.router, prefix="/api")
 
