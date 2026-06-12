@@ -81,7 +81,7 @@ async def _mark_review_failed(review_id: str, error_message: str, *, guard_termi
 
 
 def _fail_in_new_loop(review_id: str, error_message: str, *, guard_terminal: bool = False) -> None:
-    _supabase_client._client = None
+    _supabase_client.reset_client()
     try:
         asyncio.run(_mark_review_failed(review_id, error_message, guard_terminal=guard_terminal))
     except Exception:
@@ -94,7 +94,7 @@ def process_review_task(self, review_id: str, template_id: str):
         # Reset the singleton so this task's event loop gets a fresh client.
         # Each asyncio.run() creates a new loop; reusing a client from a prior
         # closed loop raises "Event loop is closed" errors in httpx.
-        _supabase_client._client = None
+        _supabase_client.reset_client()
 
         # Fetch the review BEFORE any status write so the idempotency guard and
         # the checkpoint/resume decision can run without first regressing status.
@@ -241,7 +241,7 @@ def process_review_task(self, review_id: str, template_id: str):
 @app.task(bind=True)
 def reap_stuck_reviews(self):
     async def _run():
-        _supabase_client._client = None
+        _supabase_client.reset_client()
         total_stuck = 0
         total_reaped = 0
         for status in storage.IN_PROGRESS_STATUSES:

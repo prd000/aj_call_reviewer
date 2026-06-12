@@ -4,6 +4,8 @@ from datetime import datetime
 
 from fpdf import FPDF, XPos, YPos
 
+from modules.scoring import overall_score as _compute_overall_score, score_tier as _score_tier
+
 
 # ---------------------------------------------------------------------------
 # Design tokens (light variant of the Binance-inspired system in context/DESIGN.md).
@@ -28,24 +30,15 @@ _CR = {"new_x": XPos.RIGHT,   "new_y": YPos.TOP}     # stay on same line
 
 
 def _overall_score(categories: list) -> float | None:
-    if not categories:
-        return None
-    scored = [c for c in categories if isinstance(c.get("score"), (int, float))]
-    if not scored:
-        return None
-    total_score = sum(c["score"] for c in scored)
-    total_max = sum(c.get("max_score", 10) for c in scored)
-    if total_max == 0:
-        return None
-    return round((total_score / total_max) * 10, 1)
+    score, _ = _compute_overall_score({"categories": categories})
+    return score
+
+
+_TIER_HEX = {"high": "#0ecb81", "mid": "#fcd535", "low": "#f6465d"}
 
 
 def _score_color(ratio: float) -> str:
-    if ratio >= 0.7:
-        return "#0ecb81"
-    if ratio >= 0.4:
-        return "#fcd535"
-    return "#f6465d"
+    return _TIER_HEX[_score_tier(ratio)]
 
 
 def _hex_to_rgb(hex_color: str) -> tuple:
@@ -282,11 +275,12 @@ def render_review_pdf(review: dict) -> bytes:
         pdf.cell(0, 8, "Category Scores", **_NL)
         pdf.ln(2)
 
+        crit_by_id = {c.get("id"): c for c in framework_criteria if c.get("id")}
         for i, cat in enumerate(categories):
-            if i < len(framework_criteria):
-                title = framework_criteria[i].get("title") or cat.get("name", "")
-            else:
-                title = cat.get("name", "")
+            crit = crit_by_id.get(cat.get("criterion_id"))
+            if crit is None and i < len(framework_criteria):
+                crit = framework_criteria[i]  # legacy positional fallback
+            title = (crit or {}).get("title") or cat.get("name", "")
 
             score = cat.get("score")
             max_score = cat.get("max_score", 10)

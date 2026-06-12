@@ -5,6 +5,7 @@ import FrameworkPanel from './FrameworkPanel'
 import SearchableSelect from './SearchableSelect'
 import TagEditor from './TagEditor'
 import { OUTCOME_OPTIONS } from '../lib/outcomes'
+import { scoreTier } from '../lib/scoreColor'
 import './ReviewResults.css'
 
 const OUTCOME_SELECT_OPTIONS = [{ value: '', label: 'Not set' }, ...OUTCOME_OPTIONS]
@@ -31,11 +32,14 @@ function getOverallScore(categories) {
   return { score: Math.round((totalScore / totalMax) * 100) / 10, maxScore: 10 }
 }
 
+const OVERALL_CLASS_MAP = {
+  high: 'review-results__avg-score--high',
+  mid: 'review-results__avg-score--mid',
+  low: 'review-results__avg-score--low',
+}
 function getOverallScoreClass(ratio) {
   if (ratio === null) return ''
-  if (ratio >= 0.7) return 'review-results__avg-score--high'
-  if (ratio >= 0.4) return 'review-results__avg-score--mid'
-  return 'review-results__avg-score--low'
+  return OVERALL_CLASS_MAP[scoreTier(ratio)]
 }
 
 export default function ReviewResults({
@@ -189,8 +193,13 @@ export default function ReviewResults({
         <section className="review-results__categories">
           <h2 className="review-results__section-heading">Category Scores</h2>
           <div className="review-results__scores-grid">
-            {categories.map((category, index) => {
-              const criterionTitle = frameworkCriteria[index]?.title
+            {(() => {
+            const critById = Object.fromEntries(
+              frameworkCriteria.filter((c) => c.id).map((c) => [c.id, c])
+            )
+            return categories.map((category, index) => {
+              const crit = critById[category.criterion_id] ?? frameworkCriteria[index]
+              const criterionTitle = crit?.title
               return (
                 <ScoreCard
                   key={category.name}
@@ -200,7 +209,8 @@ export default function ReviewResults({
                   feedback={category.feedback}
                 />
               )
-            })}
+            })
+            })()}
           </div>
         </section>
       )}

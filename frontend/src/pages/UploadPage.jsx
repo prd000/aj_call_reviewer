@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import TemplateManager from '../components/TemplateManager'
 import UploadForm from '../components/UploadForm'
@@ -25,6 +25,7 @@ export default function UploadPage() {
   const [firmAdvisors, setFirmAdvisors] = useState([])
   const [selectedFirmId, setSelectedFirmId] = useState('')
   const [selectedAdvisorId, setSelectedAdvisorId] = useState('')
+  const firmReqIdRef = useRef(0)
 
   useEffect(() => {
     if (isBds) {
@@ -35,11 +36,16 @@ export default function UploadPage() {
   async function handleFirmChange(firmId) {
     setFirmAdvisors([])
     if (!firmId) return
+    const reqId = ++firmReqIdRef.current
     try {
       const advisors = await getFirmAdvisors(firmId)
-      setFirmAdvisors(advisors)
+      if (reqId === firmReqIdRef.current) {
+        setFirmAdvisors(advisors)
+      }
     } catch {
-      setFirmAdvisors([])
+      if (reqId === firmReqIdRef.current) {
+        setFirmAdvisors([])
+      }
     }
   }
 

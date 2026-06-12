@@ -7,14 +7,8 @@ import { useLoadingWatchdog } from '../hooks/useLoadingWatchdog'
 import { useAuth } from '../context/AuthContext'
 import { chatAboutReview, downloadReviewPdf, getReview, getTags, retryReview, updateReviewMajorFocus, updateReviewNotes, updateReviewOutcome, updateReviewTags } from '../services/api'
 import { downloadBlob } from '../lib/download'
+import { IN_PROGRESS_STATUSES, PROCESSING_LABELS } from '../lib/reviewStatus'
 import './ResultsPage.css'
-
-const IN_PROGRESS_STATUSES = ['pending', 'transcribing', 'reviewing']
-const PROCESSING_LABELS = {
-  pending: 'Queued for processing…',
-  transcribing: 'Transcribing the call…',
-  reviewing: 'Generating the review…',
-}
 
 function RobotIcon() {
   // Inline SVG (repo uses inline glyphs, no icon library). Strokes use currentColor so the
@@ -72,13 +66,7 @@ export default function ResultsPage() {
     setIsDownloading(true)
     setDownloadError(null)
     try {
-      const blob = await downloadReviewPdf(id)
-      const meta = review?.metadata || {}
-      const advisor = (meta.advisor_name || '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '')
-      const prospect = (meta.prospect_name || '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '')
-      const date = review?.created_at ? review.created_at.slice(0, 10) : ''
-      const parts = [advisor, prospect, date].filter(Boolean)
-      const filename = `Call-Review-${parts.length ? parts.join('-') : 'Review'}.pdf`
+      const { blob, filename } = await downloadReviewPdf(id)
       downloadBlob(blob, filename)
     } catch (err) {
       setDownloadError(err.message || 'Failed to download PDF.')

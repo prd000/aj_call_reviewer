@@ -93,9 +93,15 @@ export async function getReview(id) {
   return handleResponse(response)
 }
 
-export async function listReviews() {
+// Returns { items: [...], next_cursor: string|null }.
+// Pass cursor from a prior response as before_cursor to fetch the next page.
+export async function listReviews({ limit, cursor } = {}) {
   const headers = await authHeaders()
-  const response = await apiFetch(`${BASE_URL}/reviews`, { headers })
+  const params = new URLSearchParams()
+  if (limit != null) params.set('limit', limit)
+  if (cursor != null) params.set('cursor', cursor)
+  const qs = params.size ? `?${params}` : ''
+  const response = await apiFetch(`${BASE_URL}/reviews${qs}`, { headers })
   return handleResponse(response)
 }
 
@@ -158,7 +164,11 @@ export async function downloadReviewPdf(id) {
     err.status = response.status
     throw err
   }
-  return response.blob()
+  const blob = await response.blob()
+  const disposition = response.headers.get('Content-Disposition') || ''
+  const match = disposition.match(/filename="([^"]+)"/)
+  const filename = match ? match[1] : 'Call-Review.pdf'
+  return { blob, filename }
 }
 
 // Pass an array of tag IDs to replace the review's tags. Returns the full updated review.

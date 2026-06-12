@@ -1,14 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { outcomeColorClass } from '../lib/outcomes'
+import { scoreTier } from '../lib/scoreColor'
+import { IN_PROGRESS_STATUSES, STATUS_LABELS } from '../lib/reviewStatus'
 import './ReviewList.css'
-
-const IN_PROGRESS_STATUSES = ['pending', 'transcribing', 'reviewing']
-const STATUS_LABELS = {
-  pending: 'Queued',
-  transcribing: 'Transcribing…',
-  reviewing: 'Reviewing…',
-}
 
 function formatDate(isoString) {
   if (!isoString) return '—'
@@ -29,11 +24,8 @@ function ScoreBadge({ score, maxScore }) {
   }
   const effectiveMax = maxScore || 10
   const ratio = score / effectiveMax
-  let cls = 'review-list-item__badge'
-  if (ratio >= 0.7) cls += ' review-list-item__badge--high'
-  else if (ratio >= 0.4) cls += ' review-list-item__badge--mid'
-  else cls += ' review-list-item__badge--low'
-
+  const tier = scoreTier(ratio)
+  const cls = `review-list-item__badge review-list-item__badge--${tier}`
   return <span className={cls}>{score}/{effectiveMax}</span>
 }
 

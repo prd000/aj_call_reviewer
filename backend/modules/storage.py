@@ -1,17 +1,31 @@
+import base64
+import json as _json
 from pathlib import Path
+
+from modules.scoring import overall_score as _compute_overall_score
 from modules.supabase_client import get_client
 
-DATA_DIR = Path(__file__).parent.parent / "data"
-RECORDINGS_DIR = DATA_DIR / "recordings"
 STORAGE_BUCKET = "recordings"
 
+# Columns selected for the narrow summary list query (no heavy jsonb payloads).
+_SUMMARY_COLUMNS = (
+    "id, status, created_at, advisor_name, firm, prospect_name, original_filename, "
+    "call_outcome, firm_id, uploaded_by, uploader_role, "
+    "overall_score, overall_max_score, template_name, tag_ids"
+)
 
-def _ensure_recordings_dir() -> None:
-    RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
+# Columns selected for the history-chat batch fetch (transcript needed for tools;
+# skips notes, major_focus, framework, storage_path, celery_task_id).
+_CHAT_COLUMNS = (
+    "id, created_at, status, firm_id, uploader_role, "
+    "review_results, transcript, speaker_map, advisor_name, firm"
+)
 
 
 def _to_row(review: dict) -> dict:
     metadata = review.get("metadata", {})
+    score, max_score = _compute_overall_score(review.get("review"))
+    template_name = (review.get("framework") or {}).get("template_name")
     return {
         "id": review["id"],
         "created_at": review["created_at"],
@@ -35,6 +49,9 @@ def _to_row(review: dict) -> dict:
         "template_id": review.get("template_id"),
         "tag_ids": review.get("tag_ids", []),
         "notes": review.get("notes"),
+        "overall_score": score,
+        "overall_max_score": max_score,
+        "template_name": template_name,
     }
 
 
@@ -47,7 +64,6 @@ def _from_row(row: dict) -> dict:
             "advisor_name": row.get("advisor_name"),
             "firm": row.get("firm"),
             "prospect_name": row.get("prospect_name"),
-            "bds_rep": row.get("bds_rep"),  # retained for pre-auth legacy records
             "original_filename": row.get("original_filename"),
             "call_outcome": row.get("call_outcome"),
         },
@@ -65,7 +81,45 @@ def _from_row(row: dict) -> dict:
         "template_id": row.get("template_id"),
         "tag_ids": row.get("tag_ids") or [],
         "notes": row.get("notes"),
+        # Precomputed summary columns (populated by _to_row on every write).
+        "overall_score": row.get("overall_score"),
+        "overall_max_score": row.get("overall_max_score"),
+        "template_name": row.get("template_name"),
     }
+
+
+def _from_summary_row(row: dict) -> dict:
+    """Map a narrow summary-query row to the shape _review_summary expects."""
+    return {
+        "id": row["id"],
+        "created_at": row["created_at"],
+        "status": row["status"],
+        "metadata": {
+            "advisor_name": row.get("advisor_name"),
+            "firm": row.get("firm"),
+            "prospect_name": row.get("prospect_name"),
+            "original_filename": row.get("original_filename"),
+            "call_outcome": row.get("call_outcome"),
+        },
+        "firm_id": row.get("firm_id"),
+        "uploaded_by": row.get("uploaded_by"),
+        "uploader_role": row.get("uploader_role"),
+        "tag_ids": row.get("tag_ids") or [],
+        "overall_score": row.get("overall_score"),
+        "overall_max_score": row.get("overall_max_score"),
+        "template_name": row.get("template_name"),
+    }
+
+
+def _encode_cursor(created_at: str, row_id: str) -> str:
+    return base64.urlsafe_b64encode(
+        _json.dumps({"c": created_at, "i": row_id}).encode()
+    ).decode()
+
+
+def _decode_cursor(cursor: str) -> tuple[str, str]:
+    data = _json.loads(base64.urlsafe_b64decode(cursor))
+    return data["c"], data["i"]
 
 
 async def save_review(review: dict) -> str:
@@ -111,9 +165,11 @@ async def list_reviews(
     firm_id: str | None = None,
     uploader_role: str | None = None,
 ) -> list[dict]:
-    """Fetch review records from Supabase, sorted by created_at descending.
+    """Fetch full review records from Supabase, sorted by created_at descending.
 
-    Pass firm_id and/or uploader_role to filter to a specific audience (FA visibility rule).
+    Selects all columns including heavy jsonb payloads. Use
+    list_review_summaries() for the History list endpoint — it fetches only
+    summary columns and supports keyset pagination.
     """
     client = await get_client()
     query = client.table("reviews").select("*").order("created_at", desc=True)
@@ -123,6 +179,90 @@ async def list_reviews(
         query = query.eq("uploader_role", uploader_role)
     result = await query.execute()
     return [_from_row(row) for row in result.data]
+
+
+async def list_review_summaries(
+    firm_id: str | None = None,
+    uploader_role: str | None = None,
+    limit: int = 50,
+    before_cursor: str | None = None,
+) -> tuple[list[dict], str | None]:
+    """Return paginated review summaries without heavy jsonb payloads.
+
+    Selects only scalar/summary columns — no transcript, review_results,
+    speaker_map, or framework. Uses keyset pagination on (created_at DESC,
+    id DESC).
+
+    Returns (rows, next_cursor) where next_cursor is None when no more pages
+    exist. Callers should pass next_cursor back as before_cursor to fetch the
+    next page.
+    """
+    client = await get_client()
+    fetch_limit = limit + 1  # one extra to detect has_more
+    query = (
+        client.table("reviews")
+        .select(_SUMMARY_COLUMNS)
+        .order("created_at", desc=True)
+        .order("id", desc=True)
+        .limit(fetch_limit)
+    )
+    if firm_id is not None:
+        query = query.eq("firm_id", firm_id)
+    if uploader_role is not None:
+        query = query.eq("uploader_role", uploader_role)
+    if before_cursor:
+        ca, rid = _decode_cursor(before_cursor)
+        # Rows that come after the cursor in DESC order:
+        # (created_at < ca) OR (created_at = ca AND id < rid)
+        query = query.or_(
+            f"created_at.lt.{ca},and(created_at.eq.{ca},id.lt.{rid})"
+        )
+    result = await query.execute()
+    rows = result.data or []
+
+    if len(rows) > limit:
+        rows = rows[:limit]
+        last = rows[-1]
+        next_cursor: str | None = _encode_cursor(last["created_at"], last["id"])
+    else:
+        next_cursor = None
+
+    return [_from_summary_row(r) for r in rows], next_cursor
+
+
+async def get_reviews_by_ids(ids: list[str]) -> list[dict]:
+    """Batch-fetch reviews by id list, selecting only history-chat columns.
+
+    Returns dicts in the same shape as get_review() for the subset of fields
+    needed by the history-chat path (transcript, review_results, metadata).
+    Order is not guaranteed to match ids.
+    """
+    if not ids:
+        return []
+    client = await get_client()
+    result = (
+        await client.table("reviews")
+        .select(_CHAT_COLUMNS)
+        .in_("id", ids)
+        .execute()
+    )
+    return [
+        {
+            "id": r["id"],
+            "created_at": r["created_at"],
+            "status": r["status"],
+            "firm_id": r.get("firm_id"),
+            "uploader_role": r.get("uploader_role"),
+            "review": r.get("review_results"),
+            "transcript": r.get("transcript"),
+            "speaker_map": r.get("speaker_map"),
+            "metadata": {
+                "advisor_name": r.get("advisor_name"),
+                "firm": r.get("firm"),
+            },
+        }
+        for r in (result.data or [])
+    ]
 
 
 async def delete_review(review_id: str) -> None:
@@ -238,15 +378,6 @@ async def delete_recording_from_storage(storage_path: str) -> None:
         pass
 
 
-def save_recording(review_id: str, file_bytes: bytes, filename: str) -> Path:
-    """Save a raw recording file to disk temporarily (for transcription). Returns the saved path."""
-    _ensure_recordings_dir()
-    safe_filename = Path(filename).name
-    recording_path = RECORDINGS_DIR / f"{review_id}_{safe_filename}"
-    recording_path.write_bytes(file_bytes)
-    return recording_path
-
-
 async def update_review_tags(review_id: str, tag_ids: list[str]) -> None:
     """Replace the tag_ids array on a review."""
     client = await get_client()
@@ -260,13 +391,3 @@ async def update_review_notes(review_id: str, notes: str | None) -> None:
     """
     client = await get_client()
     await client.table("reviews").update({"notes": notes}).eq("id", review_id).execute()
-
-
-def delete_recording(review_id: str, original_filename: str) -> bool:
-    """Delete the temporary recording file from disk. Returns True if deleted, False if not found."""
-    safe_filename = Path(original_filename).name
-    recording_path = RECORDINGS_DIR / f"{review_id}_{safe_filename}"
-    if recording_path.exists():
-        recording_path.unlink()
-        return True
-    return False

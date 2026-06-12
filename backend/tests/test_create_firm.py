@@ -11,18 +11,20 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from main import app
-from modules.auth import require_bds_rep
+from modules.auth import get_current_user, require_bds_rep
 
 FAKE_USER = {"user_id": "bds-rep-uuid-123", "role": "bds_rep", "name": "Test Rep"}
 
 
-def _override_require_bds_rep():
+def _override_bds_rep():
     return FAKE_USER
 
 
 @pytest.fixture
 def client():
-    app.dependency_overrides[require_bds_rep] = _override_require_bds_rep
+    # Override both the router-level baseline dep and the endpoint-level BDS dep.
+    app.dependency_overrides[get_current_user] = _override_bds_rep
+    app.dependency_overrides[require_bds_rep] = _override_bds_rep
     with patch("main.migrate_default_template", new_callable=AsyncMock):
         with TestClient(app) as c:
             yield c

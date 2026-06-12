@@ -5,7 +5,8 @@ from typing import Any
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from modules.llm_config import get_llm, get_llm_api_key
-from modules.reviewer import LLMUnavailableError, _format_transcript_labeled
+from modules.reviewer import LLMUnavailableError, MAX_CHAT_HISTORY, _format_transcript_labeled
+from modules.scoring import overall_score as _calc_overall_score
 from prompts import load_prompt
 
 logger = logging.getLogger(__name__)
@@ -29,15 +30,10 @@ def _format_date(iso: str | None) -> str:
 
 
 def _compute_overall_score(review: dict) -> str:
-    categories = (review.get("review") or {}).get("categories", [])
-    if not categories:
+    score, _ = _calc_overall_score(review.get("review"))
+    if score is None:
         return "—"
-    scored = [c for c in categories if isinstance(c.get("score"), (int, float))]
-    if not scored:
-        return "—"
-    total = sum(c["score"] for c in scored)
-    total_max = sum(c.get("max_score", 10) for c in scored)
-    return f"{round((total / total_max) * 10, 1)}/10"
+    return f"{score}/10"
 
 
 def _build_handle_map(scoped_reviews: list[dict]) -> dict[str, dict]:
@@ -197,8 +193,9 @@ def chat_over_reviews(scoped_reviews: list[dict], messages: list[dict]) -> str:
     llm_with_tools = llm.bind_tools(tools)
 
     role_map: dict[str, Any] = {"user": HumanMessage, "assistant": AIMessage}
+    trimmed = messages[-MAX_CHAT_HISTORY:] if len(messages) > MAX_CHAT_HISTORY else messages
     lc_messages: list[Any] = [SystemMessage(content=system_prompt)] + [
-        role_map[m["role"]](content=m["content"]) for m in messages
+        role_map[m["role"]](content=m["content"]) for m in trimmed
     ]
 
     transcript_reads = 0

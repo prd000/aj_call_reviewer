@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from modules.auth import get_current_user, require_bds_rep
+from modules.auth import get_current_user, invalidate_profile, require_bds_rep
 from modules.firms import delete_firm, get_firm, get_firm_users, list_firms, save_firm
 from modules.user_profiles import (
     create_advisor_only,
@@ -131,6 +131,8 @@ async def create_new_user(body: UserBody, user: dict = Depends(require_bds_rep))
             return await create_advisor_only(name=body.name, firm_id=body.firm_id)
         if not body.email:
             raise ValueError("email is required when send_invite is true.")
+        if body.role == "financial_advisor" and not body.firm_id:
+            raise ValueError("firm_id is required when inviting a financial_advisor.")
         return await create_user(
             email=body.email,
             name=body.name,
@@ -149,6 +151,7 @@ async def update_user(
     profile = await update_profile(user_id, body.model_dump(exclude_unset=True))
     if profile is None:
         raise HTTPException(status_code=404, detail="User not found")
+    invalidate_profile(user_id)
     return profile
 
 
@@ -158,6 +161,7 @@ async def toggle_user_active(
 ):
     try:
         await set_active(user_id, body.active)
+        invalidate_profile(user_id)
         return {"user_id": user_id, "active": body.active}
     except Exception as exc:
         logger.error("Failed to set active=%s for user %s: %s", body.active, user_id, exc)
@@ -169,7 +173,9 @@ async def promote_user(
     user_id: str, body: PromoteUserBody, user: dict = Depends(require_bds_rep)
 ):
     try:
-        return await promote_advisor_to_user(user_id, body.email.strip())
+        result = await promote_advisor_to_user(user_id, body.email.strip())
+        invalidate_profile(user_id)
+        return result
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:

@@ -13,7 +13,7 @@ import './TemplateManager.css'
 const ALLOWED_TEMPLATE_KEYS = new Set(['name', 'criteria'])
 const ALLOWED_CRITERION_KEYS = new Set(['id', 'title', 'description', 'success_condition', 'max_score'])
 
-function validateImportedTemplate(parsed) {
+export function validateImportedTemplate(parsed) {
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return { ok: false, error: 'JSON must be an object with "name" and "criteria".' }
   }

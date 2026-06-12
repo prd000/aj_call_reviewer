@@ -1,16 +1,11 @@
+import { scoreTier } from '../lib/scoreColor'
 import './ScoreCard.css'
 
-function getScoreColor(ratio) {
-  if (ratio >= 0.7) return 'var(--color-success)'
-  if (ratio >= 0.4) return 'var(--color-primary)'
-  return 'var(--color-danger)'
-}
+const COLOR_MAP = { high: 'var(--color-success)', mid: 'var(--color-primary)', low: 'var(--color-danger)' }
+const CLASS_MAP = { high: 'score-card__score--high', mid: 'score-card__score--mid', low: 'score-card__score--low' }
 
-function getScoreClass(ratio) {
-  if (ratio >= 0.7) return 'score-card__score--high'
-  if (ratio >= 0.4) return 'score-card__score--mid'
-  return 'score-card__score--low'
-}
+function getScoreColor(ratio) { return COLOR_MAP[scoreTier(ratio)] }
+function getScoreClass(ratio) { return CLASS_MAP[scoreTier(ratio)] }
 
 export default function ScoreCard({ name, score, feedback, maxScore = 10 }) {
   const ratio = score / maxScore

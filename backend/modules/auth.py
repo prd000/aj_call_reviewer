@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 
 import httpx
 import jwt
@@ -24,12 +25,29 @@ _TRANSIENT_EXCEPTIONS = (
 # Lazy singleton — fetches JWKS once, caches by key ID
 _jwks_client: PyJWKClient | None = None
 
+# Short-TTL in-process profile cache.  Keyed by user_id; value is
+# (profile_dict, monotonic_timestamp).  Eliminates one Supabase round-trip per
+# request on the hot polling path while keeping deactivation/role-change lag
+# <= TTL.  Per-process: each uvicorn/Celery worker has its own cache.
+_PROFILE_CACHE_TTL = float(os.environ.get("PROFILE_CACHE_TTL_SECONDS", "30"))
+_profile_cache: dict[str, tuple[dict, float]] = {}
+
 
 def _get_jwks_client() -> PyJWKClient:
     global _jwks_client
     if _jwks_client is None:
         _jwks_client = PyJWKClient(_JWKS_URL, cache_keys=True)
     return _jwks_client
+
+
+def invalidate_profile(user_id: str) -> None:
+    """Remove a user's cached profile, forcing a fresh DB fetch on next request.
+
+    Call this after any write that changes role, firm, or is_active so
+    deactivation/role changes take effect within one request rather than
+    waiting for the TTL to expire.
+    """
+    _profile_cache.pop(user_id, None)
 
 
 def _validate_token(token: str) -> str:
@@ -41,6 +59,9 @@ def _validate_token(token: str) -> str:
 
     try:
         if alg == "HS256":
+            if not SUPABASE_JWT_SECRET:
+                logger.error("HS256 token received but SUPABASE_JWT_SECRET is unset")
+                raise HTTPException(status_code=401, detail="Invalid token")
             payload = jwt.decode(
                 token,
                 SUPABASE_JWT_SECRET,
@@ -81,6 +102,23 @@ async def get_current_user(authorization: str | None = Header(None)):
     token = authorization.removeprefix("Bearer ")
     user_id = _validate_token(token)
 
+    # Check the short-TTL cache before hitting Supabase.
+    now = time.monotonic()
+    cached = _profile_cache.get(user_id)
+    if cached is not None:
+        p, ts = cached
+        if now - ts < _PROFILE_CACHE_TTL:
+            if not p["is_active"]:
+                raise HTTPException(status_code=403, detail="Account deactivated")
+            return {
+                "user_id": user_id,
+                "role": p["role"],
+                "firm_id": p.get("firm_id"),
+                "name": p["name"],
+            }
+        # Expired — evict and fall through to DB fetch.
+        del _profile_cache[user_id]
+
     try:
         p = await get_profile(user_id)
     except _TRANSIENT_EXCEPTIONS as e:
@@ -91,6 +129,9 @@ async def get_current_user(authorization: str | None = Header(None)):
         raise HTTPException(status_code=401, detail="No profile found")
     if not p["is_active"]:
         raise HTTPException(status_code=403, detail="Account deactivated")
+
+    _profile_cache[user_id] = (p, now)
+
     return {
         "user_id": user_id,
         "role": p["role"],
