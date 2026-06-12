@@ -405,39 +405,40 @@ def generate_major_focus(
     return llm.invoke(messages).content.strip()
 
 
-def _parse_email_json(content: str) -> dict:
-    """Tolerant JSON parser for coaching-email LLM responses.
+def _split_email_text(content: str) -> dict:
+    """Split a plain-text coaching email into ``{"subject", "body"}``.
 
-    Mirrors _parse_criterion_json's tolerance (code fences, trailing prose) but
-    requires the 'subject' and 'body' keys. Raises ValueError on garbage or
-    missing keys.
+    Expects a leading ``Subject: ...`` line followed by the body. Tolerant of a
+    missing prefix (first non-empty line becomes the subject) and of code fences.
+    Plain text avoids the JSON-escaping/truncation fragility of asking the model
+    to encode a multi-paragraph email (with quoted prospect words) as JSON.
     """
-    if content.startswith("```"):
-        lines = content.split("\n")
-        content = "\n".join(line for line in lines if not line.startswith("```")).strip()
+    text = content.strip()
+    if text.startswith("```"):
+        lines = text.split("\n")
+        text = "\n".join(line for line in lines if not line.startswith("```")).strip()
 
-    try:
-        parsed = _json.loads(content)
-    except _json.JSONDecodeError:
-        start = content.find("{")
-        if start == -1:
-            raise ValueError(f"No JSON object found in email response: {content[:200]!r}")
-        depth, end = 0, -1
-        for i, ch in enumerate(content[start:], start):
-            if ch == "{":
-                depth += 1
-            elif ch == "}":
-                depth -= 1
-                if depth == 0:
-                    end = i + 1
-                    break
-        if end == -1:
-            raise ValueError(f"Unbalanced braces in email response: {content[:200]!r}")
-        parsed = _json.loads(content[start:end])
+    lines = text.split("\n")
+    subject = ""
+    body_start = 0
+    for i, line in enumerate(lines):
+        if not line.strip():
+            continue
+        stripped = line.strip()
+        if stripped.lower().startswith("subject:"):
+            subject = stripped[len("subject:"):].strip()
+        else:
+            # No explicit Subject: prefix — treat the first non-empty line as the subject.
+            subject = stripped
+        body_start = i + 1
+        break
 
-    if "subject" not in parsed or "body" not in parsed:
-        raise ValueError(f"Email response missing subject/body keys: {parsed!r}")
-    return parsed
+    body = "\n".join(lines[body_start:]).strip()
+    # If the model put everything on/after the subject line with no body, fall back
+    # to using the whole text as the body so nothing is lost.
+    if not body:
+        body = text
+    return {"subject": subject, "body": body}
 
 
 def generate_coaching_email(review: dict, sign_off_name: str = "") -> dict:
@@ -447,6 +448,9 @@ def generate_coaching_email(review: dict, sign_off_name: str = "") -> dict:
     full transcript so it can quote the prospect's actual words and give exact
     follow-up phrasing. ``sign_off_name`` is the coach's own name, injected so the
     email is signed correctly (never hardcoded). Returns ``{"subject", "body"}``.
+
+    The model returns plain text (a ``Subject:`` line then the body); a generous
+    ``max_tokens`` prevents the email being truncated mid-draft.
 
     Raises LLMUnavailableError if no API key is configured.
     """
@@ -472,25 +476,9 @@ def generate_coaching_email(review: dict, sign_off_name: str = "") -> dict:
         SystemMessage(content=system_prompt),
         HumanMessage(content=user_prompt),
     ]
-    llm = get_llm(temperature=0.4, json_mode=True)
-
-    parsed = None
-    last_exc = None
-    for attempt in range(2):
-        try:
-            response = llm.invoke(messages)
-            parsed = _parse_email_json(response.content.strip())
-            break
-        except (ValueError, _json.JSONDecodeError) as exc:
-            last_exc = exc
-            logger.warning("Coaching email parse failure (attempt %d/2): %s", attempt + 1, exc)
-    if parsed is None:
-        raise ValueError(f"Coaching email failed after 2 attempts: {last_exc}")
-
-    return {
-        "subject": str(parsed["subject"]).strip(),
-        "body": str(parsed["body"]).strip(),
-    }
+    llm = get_llm(temperature=0.4, max_tokens=2048)
+    content = llm.invoke(messages).content.strip()
+    return _split_email_text(content)
 
 
 def review_call(transcript: list[dict], criteria: list[dict]) -> dict:

@@ -54,7 +54,12 @@ def get_llm_api_key() -> str:
     return os.environ.get(config["api_key_env"], "").strip()
 
 
-def get_llm(temperature: float, role: str | None = None, json_mode: bool = False) -> ChatOpenAI:
+def get_llm(
+    temperature: float,
+    role: str | None = None,
+    json_mode: bool = False,
+    max_tokens: int | None = None,
+) -> ChatOpenAI:
     provider = _get_provider_name()
     config = PROVIDER_CONFIG.get(provider)
     if config is None:
@@ -75,6 +80,10 @@ def get_llm(temperature: float, role: str | None = None, json_mode: bool = False
         kwargs["base_url"] = config["base_url"]
     kwargs["timeout"] = _get_request_timeout()
     kwargs["max_retries"] = _get_max_retries()
+    if max_tokens is not None:
+        # Explicit completion cap; prevents long free-text outputs (e.g. coaching
+        # emails) from being silently truncated at the provider's default limit.
+        kwargs["max_tokens"] = max_tokens
     if json_mode:
         # Both DeepSeek and OpenAI honor this; DeepSeek additionally requires "json"
         # somewhere in the prompt (criterion.system.txt already satisfies this).
