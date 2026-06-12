@@ -223,6 +223,21 @@ def test_update_review_status_default_is_unconditional(monkeypatch):
     assert not any(c[0] == "neq" for c in calls)
 
 
+def test_update_review_status_guard_pending_adds_eq(monkeypatch):
+    # Writing celery_task_id back after enqueue must only apply while still
+    # "pending" — a fast worker may have already advanced the row. The guard
+    # adds a status == "pending" filter on top of the id eq.
+    calls, client = _make_query_recorder()
+    monkeypatch.setattr(storage, "get_client", AsyncMock(return_value=client))
+    asyncio.run(
+        storage.update_review_status(
+            "r1", "pending", celery_task_id="task-1", guard_pending=True
+        )
+    )
+    assert ("eq", "status", "pending") in calls
+    assert not any(c[0] == "neq" for c in calls)
+
+
 # ---------------------------------------------------------------------------
 # (d) Transcription-phase failure DOES re-transcribe (guard against over-fixing)
 # ---------------------------------------------------------------------------

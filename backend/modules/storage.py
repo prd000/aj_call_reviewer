@@ -281,6 +281,7 @@ async def update_review_status(
     error_message: str | None = None,
     celery_task_id: str | None = None,
     guard_terminal: bool = False,
+    guard_pending: bool = False,
     clear_error_message: bool = False,
 ) -> None:
     """Partial update of a review's status and optional fields.
@@ -291,6 +292,14 @@ async def update_review_status(
     ``"transcribing"``/``"reviewing"``. Default False preserves unconditional
     writes for callers that must always apply — the ``"failed"`` cleanup write
     (tasks.py) and the initial ``"pending"`` write (upload.py).
+
+    When ``guard_pending`` is True the write only applies to rows still in the
+    ``"pending"`` state (via a ``status == "pending"`` filter). Used when writing
+    ``celery_task_id`` back after enqueue: a fast-starting worker may have already
+    advanced the row to ``"transcribing"``, and this guard prevents regressing it
+    back to ``"pending"``. ``guard_terminal`` and ``guard_pending`` are mutually
+    exclusive in practice (different callers); passing both narrows to neither
+    state and is not expected.
 
     Pass ``clear_error_message=True`` to reset ``error_message`` back to NULL (used
     by the Retry endpoint when re-queuing a previously-failed review). An explicit
@@ -307,6 +316,8 @@ async def update_review_status(
     query = client.table("reviews").update(patch).eq("id", review_id)
     if guard_terminal:
         query = query.neq("status", "complete")
+    if guard_pending:
+        query = query.eq("status", "pending")
     await query.execute()
 
 
