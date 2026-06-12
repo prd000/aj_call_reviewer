@@ -170,6 +170,21 @@ async def promote_advisor_to_user(user_id: str, email: str) -> dict:
     return result.data[0]
 
 
+async def set_default_template(user_id: str, template_id: str | None) -> dict | None:
+    """Set or clear the rep's preferred default review template."""
+    client = await get_client()
+    now = datetime.now(timezone.utc).isoformat()
+    result = await (
+        client.table("profiles")
+        .update({"default_template_id": template_id, "updated_at": now})
+        .eq("id", user_id)
+        .execute()
+    )
+    if not result.data:
+        return None
+    return result.data[0]
+
+
 async def mark_password_set(user_id: str) -> dict | None:
     """Flip `has_set_password=True` after the user successfully chooses a password."""
     client = await get_client()

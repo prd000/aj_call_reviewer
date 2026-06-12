@@ -3,9 +3,10 @@ import { useParams, Link } from 'react-router-dom'
 import ReviewResults from '../components/ReviewResults'
 import ChatPanel from '../components/ChatPanel'
 import NotesModal from '../components/NotesModal'
+import DraftEmailModal from '../components/DraftEmailModal'
 import { useLoadingWatchdog } from '../hooks/useLoadingWatchdog'
 import { useAuth } from '../context/AuthContext'
-import { chatAboutReview, downloadReviewPdf, getReview, getTags, retryReview, updateReviewMajorFocus, updateReviewNotes, updateReviewOutcome, updateReviewTags } from '../services/api'
+import { chatAboutReview, draftCoachingEmail, downloadReviewPdf, getReview, getTags, retryReview, updateReviewMajorFocus, updateReviewNotes, updateReviewOutcome, updateReviewTags } from '../services/api'
 import { downloadBlob } from '../lib/download'
 import { IN_PROGRESS_STATUSES, PROCESSING_LABELS } from '../lib/reviewStatus'
 import './ResultsPage.css'
@@ -59,6 +60,10 @@ export default function ResultsPage() {
   const [isNotesOpen, setIsNotesOpen] = useState(false)
   const [isSavingNotes, setIsSavingNotes] = useState(false)
   const [notesError, setNotesError] = useState(null)
+  const [isDraftEmailOpen, setIsDraftEmailOpen] = useState(false)
+  const [isDraftingEmail, setIsDraftingEmail] = useState(false)
+  const [draftEmailError, setDraftEmailError] = useState(null)
+  const [draftedEmail, setDraftedEmail] = useState(null)
   const transcriptRef = useRef(null)
   useLoadingWatchdog(isLoading, setIsLoading, { label: 'results' })
 
@@ -161,6 +166,35 @@ export default function ResultsPage() {
       setNotesError(err.message || 'Failed to save notes.')
     } finally {
       setIsSavingNotes(false)
+    }
+  }
+
+  // Initial draft: generates a coaching email and opens the modal on success.
+  async function handleDraftEmail() {
+    setDraftEmailError(null)
+    setIsDraftingEmail(true)
+    try {
+      const email = await draftCoachingEmail(id)
+      setDraftedEmail(email)
+      setIsDraftEmailOpen(true)
+    } catch (err) {
+      setDraftEmailError(err.message || 'Failed to draft email.')
+    } finally {
+      setIsDraftingEmail(false)
+    }
+  }
+
+  // Regenerate from within the open modal; keeps it open and swaps in the new draft.
+  async function handleRegenerateEmail() {
+    setDraftEmailError(null)
+    setIsDraftingEmail(true)
+    try {
+      const email = await draftCoachingEmail(id)
+      setDraftedEmail(email)
+    } catch (err) {
+      setDraftEmailError(err.message || 'Failed to draft email.')
+    } finally {
+      setIsDraftingEmail(false)
     }
   }
 
@@ -274,8 +308,20 @@ export default function ResultsPage() {
                   >
                     {isDownloading ? 'Generating…' : 'Download PDF'}
                   </button>
+                  {isBds && (
+                    <button
+                      className="results-page__draft-email-btn"
+                      onClick={handleDraftEmail}
+                      disabled={isDraftingEmail}
+                    >
+                      {isDraftingEmail ? 'Drafting…' : 'Draft Email'}
+                    </button>
+                  )}
                   {downloadError && (
                     <p className="results-page__download-error">{downloadError}</p>
+                  )}
+                  {draftEmailError && !isDraftEmailOpen && (
+                    <p className="results-page__download-error">{draftEmailError}</p>
                   )}
                 </div>
               )}
@@ -358,6 +404,17 @@ export default function ResultsPage() {
               onSave={handleSaveNotes}
               isSaving={isSavingNotes}
               saveError={notesError}
+            />
+          )}
+          {isBds && (
+            <DraftEmailModal
+              isOpen={isDraftEmailOpen}
+              onClose={() => setIsDraftEmailOpen(false)}
+              subject={draftedEmail?.subject}
+              body={draftedEmail?.body}
+              isDrafting={isDraftingEmail}
+              draftError={draftEmailError}
+              onRegenerate={handleRegenerateEmail}
             />
           )}
         </>

@@ -64,7 +64,7 @@ export function validateImportedTemplate(parsed) {
   return { ok: true, template: { name: parsed.name, criteria } }
 }
 
-export default function TemplateManager({ onCriteriaChange }) {
+export default function TemplateManager({ onCriteriaChange, defaultTemplateId = null, onSetDefault = null }) {
   const [templates, setTemplates] = useState([])
   const [selectedId, setSelectedId] = useState(null)
   const [activeName, setActiveName] = useState('')
@@ -76,6 +76,7 @@ export default function TemplateManager({ onCriteriaChange }) {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [defaultId, setDefaultId] = useState(defaultTemplateId)
   const fileInputRef = useRef(null)
   useLoadingWatchdog(isLoading, setIsLoading, { label: 'template-manager' })
 
@@ -83,12 +84,17 @@ export default function TemplateManager({ onCriteriaChange }) {
     initTemplates()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    setDefaultId(defaultTemplateId)
+  }, [defaultTemplateId])
+
   async function initTemplates() {
     try {
       const data = await listTemplates()
       setTemplates(data)
       if (data.length > 0) {
-        const full = await getTemplate(data[0].id)
+        const startId = data.find(t => t.id === defaultTemplateId)?.id ?? data[0].id
+        const full = await getTemplate(startId)
         applyTemplate(full, data)
       }
     } catch (err) {
@@ -334,11 +340,26 @@ export default function TemplateManager({ onCriteriaChange }) {
         >
           {templates.map(t => (
             <option key={t.id} value={t.id}>
-              {t.name}
+              {t.name}{t.id === defaultId ? ' (default)' : ''}
             </option>
           ))}
           <option value="new">+ New Template</option>
         </select>
+
+        {onSetDefault && selectedId && selectedId !== 'new' && (
+          <button
+            className={`template-manager__btn template-manager__btn--default${selectedId === defaultId ? ' template-manager__btn--default--active' : ''}`}
+            onClick={async () => {
+              if (selectedId !== defaultId) {
+                setDefaultId(selectedId)
+                await onSetDefault(selectedId)
+              }
+            }}
+            title={selectedId === defaultId ? 'This is your default template' : 'Set as default template'}
+          >
+            {selectedId === defaultId ? '★ Default' : '☆ Set as default'}
+          </button>
+        )}
 
         <input
           className="template-manager__name-input"

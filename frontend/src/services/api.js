@@ -149,6 +149,16 @@ export async function updateReviewMajorFocus(id, criterionId) {
   return handleResponse(response)
 }
 
+export async function draftCoachingEmail(id) {
+  const headers = await authHeaders()
+  const response = await apiFetch(
+    `${BASE_URL}/reviews/${id}/coaching-email`,
+    { method: 'POST', headers },
+    CHAT_AGENT_TIMEOUT_MS,
+  )
+  return handleResponse(response)
+}
+
 export async function downloadReviewPdf(id) {
   const headers = await authHeaders()
   const response = await apiFetch(`${BASE_URL}/reviews/${id}/pdf`, { headers }, PDF_TIMEOUT_MS)
@@ -285,6 +295,16 @@ export async function markPasswordSet() {
   const response = await apiFetch(`${BASE_URL}/users/me/password-set`, {
     method: 'POST',
     headers,
+  })
+  return handleResponse(response)
+}
+
+export async function setDefaultTemplate(templateId) {
+  const headers = { ...(await authHeaders()), 'Content-Type': 'application/json' }
+  const response = await apiFetch(`${BASE_URL}/users/me/default-template`, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({ template_id: templateId }),
   })
   return handleResponse(response)
 }

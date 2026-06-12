@@ -8,13 +8,14 @@ import {
   createUser,
   getFirmAdvisors,
   listFirms,
+  setDefaultTemplate,
   uploadCall,
 } from '../services/api'
 import './UploadPage.css'
 
 export default function UploadPage() {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, refreshUser } = useAuth()
   const isBds = user?.role === 'bds_rep'
 
   const [isLoading, setIsLoading] = useState(false)
@@ -135,7 +136,14 @@ export default function UploadPage() {
 
           {isBds && (
             <div className="upload-page__template-section">
-              <TemplateManager onCriteriaChange={handleCriteriaChange} />
+              <TemplateManager
+                onCriteriaChange={handleCriteriaChange}
+                defaultTemplateId={user?.default_template_id ?? null}
+                onSetDefault={async (id) => {
+                  await setDefaultTemplate(id)
+                  await refreshUser()
+                }}
+              />
             </div>
           )}
         </div>

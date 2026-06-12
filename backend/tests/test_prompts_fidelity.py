@@ -86,3 +86,36 @@ def test_summary_user_formatted():
     from_file = load_prompt("summary.user").format(transcript=t, scores_text=s)
     original = f"Transcript:\n{t}\n\nCategory Scores:\n{s}"
     assert from_file == original
+
+
+def test_coaching_email_system_raw():
+    # coaching_email.system takes no format args (used raw). .format() with no
+    # args verifies there are no unfilled single-brace placeholders, and the
+    # prompt must keep its JSON output contract and core domain terms.
+    text = load_prompt("coaching_email.system")
+    assert text
+    text.format()  # raises KeyError on any unfilled {placeholder}
+    assert "email" in text.lower()
+    assert "subject" in text.lower() and "body" in text.lower()
+
+
+def test_coaching_email_user_formatted():
+    # Guards the format CONTRACT: every placeholder must be supplied, each value
+    # is substituted in, and no unfilled braces leak through. Keep these kwargs in
+    # sync with reviewer.generate_coaching_email's
+    # load_prompt("coaching_email.user").format(...) call.
+    out = load_prompt("coaching_email.user").format(
+        sign_off_name="Kyle",
+        advisor_name="Jordan",
+        prospect_name="Diana",
+        call_outcome="follow_up_scheduled",
+        review_section="REVIEW_BLOCK\n\n",
+        transcript="TRANSCRIPT_BLOCK",
+    )
+    assert "Kyle" in out
+    assert "Jordan" in out
+    assert "Diana" in out
+    assert "follow_up_scheduled" in out
+    assert "REVIEW_BLOCK" in out
+    assert "TRANSCRIPT_BLOCK" in out
+    assert not re.search(r"\{[a-z_]+\}", out), "Unfilled placeholder found after format()"

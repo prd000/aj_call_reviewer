@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from modules.auth import get_current_user, invalidate_profile, require_bds_rep
 from modules.firms import delete_firm, get_firm, get_firm_users, list_firms, save_firm
+from modules.templates import get_template
 from modules.user_profiles import (
     create_advisor_only,
     create_user,
@@ -15,6 +16,7 @@ from modules.user_profiles import (
     mark_password_set,
     promote_advisor_to_user,
     set_active,
+    set_default_template,
     update_profile,
 )
 
@@ -47,6 +49,10 @@ class ActiveBody(BaseModel):
 
 class PromoteUserBody(BaseModel):
     email: str
+
+
+class DefaultTemplateBody(BaseModel):
+    template_id: str | None = None
 
 
 # ── Firms ─────────────────────────────────────────────────────────────────────
@@ -110,6 +116,20 @@ async def get_me(user: dict = Depends(get_current_user)):
 @router.post("/users/me/password-set")
 async def confirm_password_set(user: dict = Depends(get_current_user)):
     profile = await mark_password_set(user["user_id"])
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return profile
+
+
+@router.put("/users/me/default-template")
+async def set_my_default_template(
+    body: DefaultTemplateBody, user: dict = Depends(require_bds_rep)
+):
+    if body.template_id is not None:
+        template = await get_template(body.template_id)
+        if template is None:
+            raise HTTPException(status_code=404, detail="Template not found")
+    profile = await set_default_template(user["user_id"], body.template_id)
     if profile is None:
         raise HTTPException(status_code=404, detail="Profile not found")
     return profile

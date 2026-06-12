@@ -405,6 +405,94 @@ def generate_major_focus(
     return llm.invoke(messages).content.strip()
 
 
+def _parse_email_json(content: str) -> dict:
+    """Tolerant JSON parser for coaching-email LLM responses.
+
+    Mirrors _parse_criterion_json's tolerance (code fences, trailing prose) but
+    requires the 'subject' and 'body' keys. Raises ValueError on garbage or
+    missing keys.
+    """
+    if content.startswith("```"):
+        lines = content.split("\n")
+        content = "\n".join(line for line in lines if not line.startswith("```")).strip()
+
+    try:
+        parsed = _json.loads(content)
+    except _json.JSONDecodeError:
+        start = content.find("{")
+        if start == -1:
+            raise ValueError(f"No JSON object found in email response: {content[:200]!r}")
+        depth, end = 0, -1
+        for i, ch in enumerate(content[start:], start):
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    end = i + 1
+                    break
+        if end == -1:
+            raise ValueError(f"Unbalanced braces in email response: {content[:200]!r}")
+        parsed = _json.loads(content[start:end])
+
+    if "subject" not in parsed or "body" not in parsed:
+        raise ValueError(f"Email response missing subject/body keys: {parsed!r}")
+    return parsed
+
+
+def generate_coaching_email(review: dict, sign_off_name: str = "") -> dict:
+    """Draft a coaching email from the coach to the advisor about this call.
+
+    Feeds the model both the official review (scores + written feedback) and the
+    full transcript so it can quote the prospect's actual words and give exact
+    follow-up phrasing. ``sign_off_name`` is the coach's own name, injected so the
+    email is signed correctly (never hardcoded). Returns ``{"subject", "body"}``.
+
+    Raises LLMUnavailableError if no API key is configured.
+    """
+    if not get_llm_api_key():
+        raise LLMUnavailableError("No LLM API key is configured.")
+
+    metadata = review.get("metadata") or {}
+    transcript_text = _format_transcript_labeled(
+        review.get("transcript") or [], review.get("speaker_map") or {}
+    )
+    review_section = _format_review_results(review.get("review"))
+
+    system_prompt = load_prompt("coaching_email.system")
+    user_prompt = load_prompt("coaching_email.user").format(
+        sign_off_name=(sign_off_name or "").strip() or "your coach",
+        advisor_name=(metadata.get("advisor_name") or "").strip() or "the advisor",
+        prospect_name=(metadata.get("prospect_name") or "").strip() or "the prospect",
+        call_outcome=(metadata.get("call_outcome") or "").strip() or "not recorded",
+        review_section=review_section,
+        transcript=transcript_text,
+    )
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=user_prompt),
+    ]
+    llm = get_llm(temperature=0.4, json_mode=True)
+
+    parsed = None
+    last_exc = None
+    for attempt in range(2):
+        try:
+            response = llm.invoke(messages)
+            parsed = _parse_email_json(response.content.strip())
+            break
+        except (ValueError, _json.JSONDecodeError) as exc:
+            last_exc = exc
+            logger.warning("Coaching email parse failure (attempt %d/2): %s", attempt + 1, exc)
+    if parsed is None:
+        raise ValueError(f"Coaching email failed after 2 attempts: {last_exc}")
+
+    return {
+        "subject": str(parsed["subject"]).strip(),
+        "body": str(parsed["body"]).strip(),
+    }
+
+
 def review_call(transcript: list[dict], criteria: list[dict]) -> dict:
     """
     Generate a structured review for a call transcript.

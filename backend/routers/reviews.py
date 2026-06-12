@@ -11,7 +11,12 @@ from modules.firms import list_firms
 from modules.ingestion import CallOutcome
 from modules.history_chat import chat_over_reviews
 from modules.pdf_export import render_review_pdf, review_pdf_filename
-from modules.reviewer import LLMUnavailableError, chat_about_transcript, generate_major_focus
+from modules.reviewer import (
+    LLMUnavailableError,
+    chat_about_transcript,
+    generate_coaching_email,
+    generate_major_focus,
+)
 from modules.scoring import overall_score as _compute_overall_score
 from modules.storage import (
     delete_recording_from_storage,
@@ -260,6 +265,46 @@ async def update_review_major_focus_by_id(
     }
     await update_review_major_focus(review_id, focus)
     return await get_review(review_id)
+
+
+@router.post("/reviews/{review_id}/coaching-email")
+async def draft_coaching_email(
+    review_id: str,
+    user: dict = Depends(require_bds_rep),
+):
+    """Draft a coaching email (subject + body) for a completed review.
+
+    Ephemeral: the draft is returned to the caller and not persisted. The coach's
+    sign-off name comes from the authenticated profile, never from the client.
+    """
+    review = await get_review(review_id)
+    if review is None:
+        raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found.")
+
+    if review.get("status") != "complete":
+        raise HTTPException(status_code=400, detail="Review is not complete yet.")
+
+    categories = (review.get("review") or {}).get("categories", [])
+    if not categories:
+        raise HTTPException(status_code=400, detail="Review has no scored categories.")
+
+    sign_off_name = user.get("name") or ""
+
+    try:
+        email = await run_in_threadpool(generate_coaching_email, review, sign_off_name)
+    except LLMUnavailableError:
+        raise HTTPException(
+            status_code=503,
+            detail="Email drafting is unavailable: no AI provider is configured.",
+        )
+    except Exception as exc:
+        logger.error("draft_coaching_email failed: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=502,
+            detail="Couldn't draft the email. Please try again later.",
+        )
+
+    return email
 
 
 @router.patch("/reviews/{review_id}/tags")
