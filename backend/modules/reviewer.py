@@ -247,6 +247,44 @@ def identify_speakers(transcript: list[dict]) -> dict:
         return {}
 
 
+def _parse_criterion_json(content: str) -> dict:
+    """Tolerant JSON parser for criterion LLM responses.
+
+    Handles plain JSON, code-fenced JSON, and JSON with trailing prose.
+    Raises ValueError on unrecoverable garbage or missing required keys.
+    """
+    # Strip code fences
+    if content.startswith("```"):
+        lines = content.split("\n")
+        content = "\n".join(line for line in lines if not line.startswith("```")).strip()
+
+    # Try direct parse first
+    try:
+        parsed = _json.loads(content)
+    except _json.JSONDecodeError:
+        # Extract the first balanced {...} block (handles JSON with trailing prose)
+        start = content.find("{")
+        if start == -1:
+            raise ValueError(f"No JSON object found in criterion response: {content[:200]!r}")
+        depth, end = 0, -1
+        for i, ch in enumerate(content[start:], start):
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    end = i + 1
+                    break
+        if end == -1:
+            raise ValueError(f"Unbalanced braces in criterion response: {content[:200]!r}")
+        parsed = _json.loads(content[start:end])
+
+    if "score" not in parsed or "feedback" not in parsed:
+        raise ValueError(f"Criterion response missing score/feedback keys: {parsed!r}")
+
+    return parsed
+
+
 def _format_transcript(transcript: list[dict]) -> str:
     lines = []
     for segment in transcript:
@@ -346,7 +384,10 @@ def review_call(transcript: list[dict], criteria: list[dict]) -> dict:
         return STUB_REVIEW
 
     try:
-        llm = get_llm(temperature=0.3)
+        # json_mode=True forces structured output for criterion scoring; the summary
+        # call is free-text so it uses a plain LLM instance without json_mode.
+        criterion_llm = get_llm(temperature=0.3, json_mode=True)
+        summary_llm = get_llm(temperature=0.3)
 
         transcript_text = _format_transcript(transcript)
         categories = []
@@ -362,16 +403,28 @@ def review_call(transcript: list[dict], criteria: list[dict]) -> dict:
                 SystemMessage(content=system_prompt),
                 HumanMessage(content=load_prompt("criterion.user").format(transcript=transcript_text)),
             ]
-            response = llm.invoke(messages)
-            content = response.content.strip()
 
-            if content.startswith("```"):
-                lines = content.split("\n")
-                content = "\n".join(
-                    line for line in lines if not line.startswith("```")
-                ).strip()
+            # Per-criterion retry: invoke once; on parse failure, re-invoke once more
+            # before propagating. After two failures the whole review fails (user's
+            # chosen semantics — Retry button already exists in the UI).
+            parsed = None
+            last_exc = None
+            for attempt in range(2):
+                try:
+                    response = criterion_llm.invoke(messages)
+                    parsed = _parse_criterion_json(response.content.strip())
+                    break
+                except (ValueError, _json.JSONDecodeError) as exc:
+                    last_exc = exc
+                    logger.warning(
+                        "Criterion %r parse failure (attempt %d/2): %s",
+                        criterion.get("title", ""), attempt + 1, exc,
+                    )
+            if parsed is None:
+                raise ValueError(
+                    f"Criterion {criterion.get('title', '')!r} failed after 2 attempts: {last_exc}"
+                )
 
-            parsed = _json.loads(content)
             categories.append(
                 {
                     "name": criterion.get("title") or criterion["description"][:60],
@@ -394,7 +447,7 @@ def review_call(transcript: list[dict], criteria: list[dict]) -> dict:
                 )
             ),
         ]
-        summary_response = llm.invoke(summary_messages)
+        summary_response = summary_llm.invoke(summary_messages)
 
         return {
             "summary": summary_response.content.strip(),

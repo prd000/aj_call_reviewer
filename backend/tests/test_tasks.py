@@ -18,11 +18,14 @@ import asyncio
 import logging
 from unittest.mock import patch, MagicMock, AsyncMock
 
+import time as time_mod
+
+import pytest
 import tasks as tasks_module
 from tasks import process_review_task, reap_stuck_reviews
 from modules import storage
 from celery_app import app
-from celery.exceptions import SoftTimeLimitExceeded, MaxRetriesExceededError
+from celery.exceptions import SoftTimeLimitExceeded
 
 
 # ---------------------------------------------------------------------------
@@ -405,16 +408,77 @@ def test_recording_deleted_after_transcription_checkpoint(monkeypatch):
 
 def test_transcription_failure_keeps_recording(monkeypatch):
     """A transcription-phase failure must KEEP the recording so Retry can
-    re-transcribe — the recording is only deleted after a successful checkpoint."""
+    re-transcribe — the recording is only deleted after a successful checkpoint.
+
+    Simulates retries exhausted via push_request(retries=max_retries). The fixed
+    code writes 'failed' BEFORE raising (never via MaxRetriesExceededError, which
+    Celery doesn't actually raise when exc= is passed to retry()).
+    """
     fake = FakeReviewDB()
     transcribe = MagicMock(side_effect=RuntimeError("revai down"))
     review_call = MagicMock(return_value=GOOD_REVIEW)
     _install(monkeypatch, fake, transcribe=transcribe, review_call=review_call)
 
-    with patch.object(process_review_task, "retry",
-                      MagicMock(side_effect=MaxRetriesExceededError())):
-        assert _attempt() == "done"   # retries exhausted -> marked failed
+    process_review_task.push_request(retries=process_review_task.max_retries)
+    try:
+        process_review_task("rev-1", "tpl-1")
+    except RuntimeError:
+        pass  # exhausted path re-raises the original exception — expected
+    finally:
+        process_review_task.pop_request()
 
     assert _count(fake.events, "checkpoint") == 0   # never reached the checkpoint
     assert _count(fake.events, "delete") == 0       # recording KEPT for a future retry
     assert fake.row["status"] == "failed"
+
+
+# ---------------------------------------------------------------------------
+# (k) Retry exhaustion writes failed — regression test for the never-worked path
+#     (Bug #1 root cause #1 fix: 2026-06-12)
+# ---------------------------------------------------------------------------
+
+def test_retry_exhaustion_writes_failed(monkeypatch):
+    """Regression: when all retries are exhausted the row MUST land in 'failed'.
+
+    Prior to the fix, self.retry(exc=exc) re-raised the ORIGINAL exception (not
+    MaxRetriesExceededError) on exhaustion, so the except MaxRetriesExceededError
+    block was dead code and the row stayed stuck in 'reviewing' forever.
+    """
+    fake = FakeReviewDB()
+    transcribe = MagicMock(return_value=GOOD_TRANSCRIPT)
+    review_call = MagicMock(side_effect=RuntimeError("persistent LLM failure"))
+    _install(monkeypatch, fake, transcribe=transcribe, review_call=review_call)
+
+    process_review_task.push_request(retries=process_review_task.max_retries)
+    try:
+        process_review_task("rev-1", "tpl-1")
+    except RuntimeError:
+        pass  # exhausted path re-raises — expected
+    finally:
+        process_review_task.pop_request()
+
+    assert fake.row.get("status") == "failed"
+    assert "persistent LLM failure" in (fake.row.get("error_message") or "")
+
+
+# ---------------------------------------------------------------------------
+# (l) _review_call_with_timeout — orphan-thread join is gone (2026-06-12 fix)
+# ---------------------------------------------------------------------------
+
+def test_review_call_with_timeout_no_orphan_join(monkeypatch):
+    """TimeoutError must propagate in under 1s even when the submitted fn sleeps
+    for much longer. Proves the 'with' executor orphan-join bug is gone: the old
+    code's __exit__ called shutdown(wait=True), joining the hung thread and silently
+    waiting for the LLM's own 120s+ timeout before raising."""
+
+    def _sleepy(*args, **kwargs):
+        time_mod.sleep(5)
+        return {}
+
+    monkeypatch.setattr(tasks_module.reviewer, "review_call", _sleepy)
+
+    start = time_mod.time()
+    with pytest.raises(TimeoutError, match="per-attempt timeout"):
+        tasks_module._review_call_with_timeout([], [], timeout_s=0.2)
+    elapsed = time_mod.time() - start
+    assert elapsed < 1.0, f"Timeout propagated too slowly ({elapsed:.2f}s) — orphan join not fixed"

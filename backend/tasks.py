@@ -4,7 +4,7 @@ import logging
 import os
 from datetime import datetime, timezone, timedelta
 
-from celery.exceptions import MaxRetriesExceededError, SoftTimeLimitExceeded
+from celery.exceptions import SoftTimeLimitExceeded
 
 from celery_app import app
 from modules import storage, transcriber, reviewer
@@ -53,17 +53,22 @@ def _review_call_with_timeout(transcript, criteria, timeout_s: int):
     Linux/Railway prod). Trade-off: on TimeoutError the worker thread is orphaned
     and keeps running until the LLM's own 120s timeout (+1 internal retry ≈ 240s)
     fires. The Celery task slot is freed immediately because the task raises and acks.
+
+    We avoid the 'with' context manager because its __exit__ calls shutdown(wait=True),
+    which joins the orphaned thread and silently waits for the hung LLM call —
+    defeating the purpose of the timeout entirely.
     """
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
         future = ex.submit(reviewer.review_call, transcript, criteria)
         try:
             return future.result(timeout=timeout_s)
         except concurrent.futures.TimeoutError:
-            # Don't block waiting for the orphan thread; let it time out on its own.
-            ex.shutdown(wait=False)
             raise TimeoutError(
                 f"review_call exceeded the {timeout_s}s per-attempt timeout"
             )
+    finally:
+        ex.shutdown(wait=False)
 
 
 async def _mark_review_failed(review_id: str, error_message: str, *, guard_terminal: bool = False) -> None:
@@ -80,7 +85,7 @@ def _fail_in_new_loop(review_id: str, error_message: str, *, guard_terminal: boo
     try:
         asyncio.run(_mark_review_failed(review_id, error_message, guard_terminal=guard_terminal))
     except Exception:
-        pass
+        logger.exception("_fail_in_new_loop: could not write failed status for review %s", review_id)
 
 
 @app.task(bind=True, max_retries=2, default_retry_delay=10)
@@ -220,16 +225,17 @@ def process_review_task(self, review_id: str, template_id: str):
             "Task failed for review %s (attempt %s/%s): %s",
             review_id, self.request.retries, self.max_retries, exc, exc_info=True,
         )
-        try:
-            if self.request.retries < self.max_retries:
-                logger.warning(
-                    "Retrying review %s (attempt %s of %s) in %ss — resumes from checkpoint",
-                    review_id, self.request.retries + 1, self.max_retries, self.default_retry_delay,
-                )
-            self.retry(exc=exc)
-        except MaxRetriesExceededError:
+        if self.request.retries >= self.max_retries:
+            # Celery's retry(exc=...) re-raises the ORIGINAL exc on exhaustion, never
+            # MaxRetriesExceededError — so the failed write must happen BEFORE retry().
             logger.error("Max retries exceeded for review %s, marking as failed.", review_id)
             _fail_in_new_loop(review_id, str(exc))
+            raise  # keep the Celery task in FAILURE state
+        logger.warning(
+            "Retrying review %s (attempt %s of %s) in %ss — resumes from checkpoint",
+            review_id, self.request.retries + 1, self.max_retries, self.default_retry_delay,
+        )
+        raise self.retry(exc=exc)
 
 
 @app.task(bind=True)

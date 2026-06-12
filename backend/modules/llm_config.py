@@ -54,7 +54,7 @@ def get_llm_api_key() -> str:
     return os.environ.get(config["api_key_env"], "").strip()
 
 
-def get_llm(temperature: float, role: str | None = None) -> ChatOpenAI:
+def get_llm(temperature: float, role: str | None = None, json_mode: bool = False) -> ChatOpenAI:
     provider = _get_provider_name()
     config = PROVIDER_CONFIG.get(provider)
     if config is None:
@@ -75,6 +75,10 @@ def get_llm(temperature: float, role: str | None = None) -> ChatOpenAI:
         kwargs["base_url"] = config["base_url"]
     kwargs["timeout"] = _get_request_timeout()
     kwargs["max_retries"] = _get_max_retries()
+    if json_mode:
+        # Both DeepSeek and OpenAI honor this; DeepSeek additionally requires "json"
+        # somewhere in the prompt (criterion.system.txt already satisfies this).
+        kwargs["model_kwargs"] = {"response_format": {"type": "json_object"}}
     logger.debug(
         "Building LLM: provider=%s model=%s base_url=%s role=%s timeout=%.1fs max_retries=%d",
         provider, model_name, config["base_url"], role,

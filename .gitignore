@@ -14,8 +14,9 @@ CLAUDE.md
 # Claude Code
 .claude/
 
-# Agent folder
+# Agent folders
 agent/
+agent-complete/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
