@@ -61,7 +61,15 @@ async def create_user(email: str, name: str, role: str, firm_id: str | None = No
         "created_at": now,
         "updated_at": now,
     }
-    await client.table("profiles").insert(profile).execute()
+    try:
+        await client.table("profiles").insert(profile).execute()
+    except Exception as exc:
+        # Compensate: clean up the auth user so we don't orphan it
+        try:
+            await client.auth.admin.delete_user(user_id)
+        except Exception as del_exc:
+            logger.error("Failed to clean up orphaned auth user %s after profile insert failure: %s", user_id, del_exc)
+        raise exc
     return profile
 
 
@@ -89,7 +97,14 @@ async def create_advisor_only(name: str, firm_id: str) -> dict:
         "created_at": now,
         "updated_at": now,
     }
-    await client.table("profiles").insert(profile).execute()
+    try:
+        await client.table("profiles").insert(profile).execute()
+    except Exception as exc:
+        try:
+            await client.auth.admin.delete_user(user_id)
+        except Exception as del_exc:
+            logger.error("Failed to clean up orphaned auth user %s after profile insert failure: %s", user_id, del_exc)
+        raise exc
     return profile
 
 
@@ -152,6 +167,21 @@ async def promote_advisor_to_user(user_id: str, email: str) -> dict:
     )
     if not result.data:
         raise ValueError("Failed to update profile.")
+    return result.data[0]
+
+
+async def set_default_template(user_id: str, template_id: str | None) -> dict | None:
+    """Set or clear the rep's preferred default review template."""
+    client = await get_client()
+    now = datetime.now(timezone.utc).isoformat()
+    result = await (
+        client.table("profiles")
+        .update({"default_template_id": template_id, "updated_at": now})
+        .eq("id", user_id)
+        .execute()
+    )
+    if not result.data:
+        return None
     return result.data[0]
 
 

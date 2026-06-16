@@ -93,9 +93,15 @@ export async function getReview(id) {
   return handleResponse(response)
 }
 
-export async function listReviews() {
+// Returns { items: [...], next_cursor: string|null }.
+// Pass cursor from a prior response as before_cursor to fetch the next page.
+export async function listReviews({ limit, cursor } = {}) {
   const headers = await authHeaders()
-  const response = await apiFetch(`${BASE_URL}/reviews`, { headers })
+  const params = new URLSearchParams()
+  if (limit != null) params.set('limit', limit)
+  if (cursor != null) params.set('cursor', cursor)
+  const qs = params.size ? `?${params}` : ''
+  const response = await apiFetch(`${BASE_URL}/reviews${qs}`, { headers })
   return handleResponse(response)
 }
 
@@ -143,6 +149,16 @@ export async function updateReviewMajorFocus(id, criterionId) {
   return handleResponse(response)
 }
 
+export async function draftCoachingEmail(id) {
+  const headers = await authHeaders()
+  const response = await apiFetch(
+    `${BASE_URL}/reviews/${id}/coaching-email`,
+    { method: 'POST', headers },
+    CHAT_AGENT_TIMEOUT_MS,
+  )
+  return handleResponse(response)
+}
+
 export async function downloadReviewPdf(id) {
   const headers = await authHeaders()
   const response = await apiFetch(`${BASE_URL}/reviews/${id}/pdf`, { headers }, PDF_TIMEOUT_MS)
@@ -158,7 +174,11 @@ export async function downloadReviewPdf(id) {
     err.status = response.status
     throw err
   }
-  return response.blob()
+  const blob = await response.blob()
+  const disposition = response.headers.get('Content-Disposition') || ''
+  const match = disposition.match(/filename="([^"]+)"/)
+  const filename = match ? match[1] : 'Call-Review.pdf'
+  return { blob, filename }
 }
 
 // Pass an array of tag IDs to replace the review's tags. Returns the full updated review.
@@ -275,6 +295,16 @@ export async function markPasswordSet() {
   const response = await apiFetch(`${BASE_URL}/users/me/password-set`, {
     method: 'POST',
     headers,
+  })
+  return handleResponse(response)
+}
+
+export async function setDefaultTemplate(templateId) {
+  const headers = { ...(await authHeaders()), 'Content-Type': 'application/json' }
+  const response = await apiFetch(`${BASE_URL}/users/me/default-template`, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({ template_id: templateId }),
   })
   return handleResponse(response)
 }

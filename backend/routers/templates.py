@@ -1,9 +1,10 @@
 import uuid
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from modules.auth import require_bds_rep
 from modules.templates import list_templates, get_template, save_template, delete_template
 
 logger = logging.getLogger(__name__)
@@ -49,7 +50,7 @@ def _criterion_dict(c: CriterionBody) -> dict:
     return d
 
 
-@router.post("/templates", status_code=201)
+@router.post("/templates", status_code=201, dependencies=[Depends(require_bds_rep)])
 async def create_template(body: TemplateBody):
     criteria = [_criterion_dict(c) for c in (body.criteria or [])]
     template = {"name": body.name or "", "criteria": criteria}
@@ -64,7 +65,7 @@ async def get_template_by_id(template_id: str):
     return template
 
 
-@router.put("/templates/{template_id}")
+@router.put("/templates/{template_id}", dependencies=[Depends(require_bds_rep)])
 async def update_template(template_id: str, body: TemplateBody):
     template = await get_template(template_id)
     if template is None:
@@ -76,7 +77,7 @@ async def update_template(template_id: str, body: TemplateBody):
     return await save_template(template)
 
 
-@router.delete("/templates/{template_id}", status_code=204)
+@router.delete("/templates/{template_id}", status_code=204, dependencies=[Depends(require_bds_rep)])
 async def delete_template_by_id(template_id: str):
     templates = await list_templates()
     if len(templates) <= 1:

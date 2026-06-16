@@ -5,10 +5,9 @@ import SearchableSelect from '../components/SearchableSelect'
 import { useAuth } from '../context/AuthContext'
 import { useLoadingWatchdog } from '../hooks/useLoadingWatchdog'
 import { NO_OUTCOME, OUTCOME_FILTER_OPTIONS } from '../lib/outcomes'
+import { IN_PROGRESS_STATUSES } from '../lib/reviewStatus'
 import { chatOverHistory, deleteReview, listFirms, listReviews, retryReview } from '../services/api'
 import './HistoryPage.css'
-
-const IN_PROGRESS_STATUSES = ['pending', 'transcribing', 'reviewing']
 
 // Sort options for the history list. `overall_score` in the list response is
 // already normalized to a 0–10 scale (overall_max_score is always 10), so it is
@@ -24,7 +23,7 @@ const DEFAULT_SORT = 'date_desc'
 // Reviews without a score (in-progress / failed) always sort to the bottom of a
 // score sort, ordered newest-first among themselves, so they never interleave
 // with scored rows.
-function compareReviews(a, b, sortBy) {
+export function compareReviews(a, b, sortBy) {
   switch (sortBy) {
     case 'date_asc':
       return new Date(a.created_at) - new Date(b.created_at)
@@ -231,16 +230,24 @@ export default function HistoryPage() {
 
   // Restart-able polling: also kicked off by a retry, which puts a review back in
   // progress after the initial fetch may have already stopped the poll.
+  // Only re-fetches the first page (newest reviews) on each tick and merges
+  // those results into the full accumulated state by id — avoids re-fetching
+  // every page on every 5s poll.
   const startPolling = useCallback(() => {
     if (pollingRef.current) return
     pollingRef.current = setInterval(async () => {
       try {
-        const data = await listReviews()
-        setReviews(data)
-        if (!data.some((r) => IN_PROGRESS_STATUSES.includes(r.status))) {
-          clearInterval(pollingRef.current)
-          pollingRef.current = null
-        }
+        const { items } = await listReviews({ limit: 50 })
+        setReviews((prev) => {
+          const byId = new Map(prev.map((r) => [r.id, r]))
+          for (const r of items) byId.set(r.id, r)
+          const merged = [...byId.values()]
+          if (!merged.some((r) => IN_PROGRESS_STATUSES.includes(r.status))) {
+            clearInterval(pollingRef.current)
+            pollingRef.current = null
+          }
+          return merged
+        })
       } catch {
         // silent — retries on next tick
       }
@@ -272,13 +279,27 @@ export default function HistoryPage() {
       setIsLoading(true)
       setError(null)
       try {
-        const requests = [listReviews()]
+        // Fetch first page in parallel with firms list (BDS only).
+        const requests = [listReviews({ limit: 200 })]
         if (isBds) requests.push(listFirms())
-        const [data, firmData] = await Promise.all(requests)
+        const [firstPage, firmData] = await Promise.all(requests)
         if (!isMounted) return
-        setReviews(data)
+
+        // Accumulate all pages via cursor loop so the full history is available
+        // for filtering and the history-chat scope without needing separate fetches.
+        let allReviews = firstPage.items
+        let cursor = firstPage.next_cursor
+        while (cursor && isMounted) {
+          const nextPage = await listReviews({ limit: 200, cursor })
+          if (!isMounted) return
+          allReviews = [...allReviews, ...nextPage.items]
+          cursor = nextPage.next_cursor
+        }
+
+        if (!isMounted) return
+        setReviews(allReviews)
         if (firmData) setFirms(firmData)
-        if (data.some((r) => IN_PROGRESS_STATUSES.includes(r.status))) {
+        if (allReviews.some((r) => IN_PROGRESS_STATUSES.includes(r.status))) {
           startPolling()
         }
       } catch (err) {

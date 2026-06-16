@@ -5,6 +5,8 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+ALLOW_STUB_PIPELINE = os.environ.get("ALLOW_STUB_PIPELINE", "").strip().lower() in ("1", "true", "yes")
+
 _POLL_INTERVAL_SECONDS = 5
 _POLL_MAX_ATTEMPTS = 360  # 30-minute ceiling
 
@@ -67,10 +69,15 @@ def transcribe(source: Path | str) -> list[dict]:
     access_token = os.environ.get("REV_AI_ACCESS_TOKEN", "").strip()
 
     if not access_token:
-        logger.warning(
-            "REV_AI_ACCESS_TOKEN is not set. Returning stub transcript for development."
+        if ALLOW_STUB_PIPELINE:
+            logger.warning(
+                "REV_AI_ACCESS_TOKEN is not set. Returning stub transcript (ALLOW_STUB_PIPELINE=true)."
+            )
+            return STUB_TRANSCRIPT
+        raise RuntimeError(
+            "Transcription not configured: REV_AI_ACCESS_TOKEN is not set. "
+            "Set ALLOW_STUB_PIPELINE=true to use stub data in development."
         )
-        return STUB_TRANSCRIPT
 
     try:
         from rev_ai import apiclient

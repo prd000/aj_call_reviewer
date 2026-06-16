@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from modules.auth import get_current_user, require_bds_rep
+from modules.auth import get_current_user, invalidate_profile, require_bds_rep
 from modules.firms import delete_firm, get_firm, get_firm_users, list_firms, save_firm
+from modules.templates import get_template
 from modules.user_profiles import (
     create_advisor_only,
     create_user,
@@ -15,6 +16,7 @@ from modules.user_profiles import (
     mark_password_set,
     promote_advisor_to_user,
     set_active,
+    set_default_template,
     update_profile,
 )
 
@@ -47,6 +49,10 @@ class ActiveBody(BaseModel):
 
 class PromoteUserBody(BaseModel):
     email: str
+
+
+class DefaultTemplateBody(BaseModel):
+    template_id: str | None = None
 
 
 # ── Firms ─────────────────────────────────────────────────────────────────────
@@ -115,6 +121,20 @@ async def confirm_password_set(user: dict = Depends(get_current_user)):
     return profile
 
 
+@router.put("/users/me/default-template")
+async def set_my_default_template(
+    body: DefaultTemplateBody, user: dict = Depends(require_bds_rep)
+):
+    if body.template_id is not None:
+        template = await get_template(body.template_id)
+        if template is None:
+            raise HTTPException(status_code=404, detail="Template not found")
+    profile = await set_default_template(user["user_id"], body.template_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return profile
+
+
 @router.get("/users/bds-reps")
 async def get_bds_reps(user: dict = Depends(require_bds_rep)):
     return await list_bds_reps()
@@ -131,6 +151,8 @@ async def create_new_user(body: UserBody, user: dict = Depends(require_bds_rep))
             return await create_advisor_only(name=body.name, firm_id=body.firm_id)
         if not body.email:
             raise ValueError("email is required when send_invite is true.")
+        if body.role == "financial_advisor" and not body.firm_id:
+            raise ValueError("firm_id is required when inviting a financial_advisor.")
         return await create_user(
             email=body.email,
             name=body.name,
@@ -149,6 +171,7 @@ async def update_user(
     profile = await update_profile(user_id, body.model_dump(exclude_unset=True))
     if profile is None:
         raise HTTPException(status_code=404, detail="User not found")
+    invalidate_profile(user_id)
     return profile
 
 
@@ -158,6 +181,7 @@ async def toggle_user_active(
 ):
     try:
         await set_active(user_id, body.active)
+        invalidate_profile(user_id)
         return {"user_id": user_id, "active": body.active}
     except Exception as exc:
         logger.error("Failed to set active=%s for user %s: %s", body.active, user_id, exc)
@@ -169,7 +193,9 @@ async def promote_user(
     user_id: str, body: PromoteUserBody, user: dict = Depends(require_bds_rep)
 ):
     try:
-        return await promote_advisor_to_user(user_id, body.email.strip())
+        result = await promote_advisor_to_user(user_id, body.email.strip())
+        invalidate_profile(user_id)
+        return result
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:

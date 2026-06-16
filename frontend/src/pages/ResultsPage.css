@@ -91,6 +91,29 @@
   cursor: not-allowed;
 }
 
+.results-page__draft-email-btn {
+  padding: 8px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--font-family);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-md);
+  background-color: var(--color-surface);
+  color: var(--color-primary);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.results-page__draft-email-btn:hover:not(:disabled) {
+  background-color: var(--color-surface-elevated);
+  border-color: var(--color-primary);
+}
+
+.results-page__draft-email-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .results-page__download-error {
   font-size: 12px;
   color: var(--color-danger);

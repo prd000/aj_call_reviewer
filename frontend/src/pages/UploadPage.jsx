@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import TemplateManager from '../components/TemplateManager'
 import UploadForm from '../components/UploadForm'
@@ -8,13 +8,14 @@ import {
   createUser,
   getFirmAdvisors,
   listFirms,
+  setDefaultTemplate,
   uploadCall,
 } from '../services/api'
 import './UploadPage.css'
 
 export default function UploadPage() {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, refreshUser } = useAuth()
   const isBds = user?.role === 'bds_rep'
 
   const [isLoading, setIsLoading] = useState(false)
@@ -25,6 +26,7 @@ export default function UploadPage() {
   const [firmAdvisors, setFirmAdvisors] = useState([])
   const [selectedFirmId, setSelectedFirmId] = useState('')
   const [selectedAdvisorId, setSelectedAdvisorId] = useState('')
+  const firmReqIdRef = useRef(0)
 
   useEffect(() => {
     if (isBds) {
@@ -35,11 +37,16 @@ export default function UploadPage() {
   async function handleFirmChange(firmId) {
     setFirmAdvisors([])
     if (!firmId) return
+    const reqId = ++firmReqIdRef.current
     try {
       const advisors = await getFirmAdvisors(firmId)
-      setFirmAdvisors(advisors)
+      if (reqId === firmReqIdRef.current) {
+        setFirmAdvisors(advisors)
+      }
     } catch {
-      setFirmAdvisors([])
+      if (reqId === firmReqIdRef.current) {
+        setFirmAdvisors([])
+      }
     }
   }
 
@@ -129,7 +136,14 @@ export default function UploadPage() {
 
           {isBds && (
             <div className="upload-page__template-section">
-              <TemplateManager onCriteriaChange={handleCriteriaChange} />
+              <TemplateManager
+                onCriteriaChange={handleCriteriaChange}
+                defaultTemplateId={user?.default_template_id ?? null}
+                onSetDefault={async (id) => {
+                  await setDefaultTemplate(id)
+                  await refreshUser()
+                }}
+              />
             </div>
           )}
         </div>

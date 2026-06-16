@@ -7,6 +7,7 @@ const OUTCOME_SELECT_OPTIONS = [{ value: '', label: 'Not set' }, ...OUTCOME_OPTI
 
 const ACCEPTED_EXTENSIONS = ['.mp3', '.mp4', '.m4a', '.wav']
 const ACCEPTED_MIME_TYPES = 'audio/mpeg,audio/mp4,audio/m4a,audio/wav,audio/x-wav,video/mp4'
+const MAX_UPLOAD_SIZE_BYTES = 200 * 1024 * 1024 // 200 MB — must match backend MAX_UPLOAD_SIZE_BYTES default
 
 function validateFileExtension(filename) {
   if (!filename) return false
@@ -58,6 +59,14 @@ export default function UploadForm({
       setErrors((prev) => ({
         ...prev,
         file: `Unsupported file type. Accepted formats: ${ACCEPTED_EXTENSIONS.join(', ')}`,
+      }))
+      setFile(null)
+      return
+    }
+    if (selected.size > MAX_UPLOAD_SIZE_BYTES) {
+      setErrors((prev) => ({
+        ...prev,
+        file: `File is too large. Maximum size is ${Math.round(MAX_UPLOAD_SIZE_BYTES / (1024 * 1024))} MB.`,
       }))
       setFile(null)
       return

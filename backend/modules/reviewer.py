@@ -1,9 +1,17 @@
-import os
+import concurrent.futures
 import json as _json
 import logging
+import os
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from modules.llm_config import get_llm, get_llm_api_key
 from prompts import load_prompt
+
+ALLOW_STUB_PIPELINE = os.environ.get("ALLOW_STUB_PIPELINE", "").strip().lower() in ("1", "true", "yes")
+
+# Max parallel LLM calls for per-criterion scoring; calls are I/O-bound so a
+# thread pool is appropriate.  Keep below the LLM provider's concurrent-request
+# limit; 5 is a safe default for most providers.
+_CRITERION_MAX_WORKERS = int(os.environ.get("CRITERION_MAX_WORKERS", "5"))
 
 logger = logging.getLogger(__name__)
 
@@ -294,6 +302,49 @@ def _format_transcript(transcript: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _evaluate_criterion(criterion: dict, transcript_text: str, criterion_llm) -> dict:
+    """Score a single criterion.  Retries once on parse failure before raising.
+
+    Returns a category dict.  Raises ValueError if both attempts fail.
+    Each call builds its own messages list so concurrent threads share only the
+    stateless criterion_llm client, which is safe for the OpenAI client.
+    """
+    max_score = criterion.get("max_score", 10)
+    system_prompt = load_prompt("criterion.system").format(
+        description=criterion["description"],
+        success_condition=criterion["success_condition"],
+        max_score=max_score,
+    )
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=load_prompt("criterion.user").format(transcript=transcript_text)),
+    ]
+    parsed = None
+    last_exc = None
+    for attempt in range(2):
+        try:
+            response = criterion_llm.invoke(messages)
+            parsed = _parse_criterion_json(response.content.strip())
+            break
+        except (ValueError, _json.JSONDecodeError) as exc:
+            last_exc = exc
+            logger.warning(
+                "Criterion %r parse failure (attempt %d/2): %s",
+                criterion.get("title", ""), attempt + 1, exc,
+            )
+    if parsed is None:
+        raise ValueError(
+            f"Criterion {criterion.get('title', '')!r} failed after 2 attempts: {last_exc}"
+        )
+    return {
+        "criterion_id": criterion.get("id", ""),
+        "name": criterion.get("title") or criterion["description"][:60],
+        "score": int(parsed["score"]),
+        "max_score": max_score,
+        "feedback": parsed["feedback"],
+    }
+
+
 def pick_default_focus_index(categories: list[dict]) -> int | None:
     """Return the index of the category with the largest absolute point deficit.
 
@@ -354,6 +405,82 @@ def generate_major_focus(
     return llm.invoke(messages).content.strip()
 
 
+def _split_email_text(content: str) -> dict:
+    """Split a plain-text coaching email into ``{"subject", "body"}``.
+
+    Expects a leading ``Subject: ...`` line followed by the body. Tolerant of a
+    missing prefix (first non-empty line becomes the subject) and of code fences.
+    Plain text avoids the JSON-escaping/truncation fragility of asking the model
+    to encode a multi-paragraph email (with quoted prospect words) as JSON.
+    """
+    text = content.strip()
+    if text.startswith("```"):
+        lines = text.split("\n")
+        text = "\n".join(line for line in lines if not line.startswith("```")).strip()
+
+    lines = text.split("\n")
+    subject = ""
+    body_start = 0
+    for i, line in enumerate(lines):
+        if not line.strip():
+            continue
+        stripped = line.strip()
+        if stripped.lower().startswith("subject:"):
+            subject = stripped[len("subject:"):].strip()
+        else:
+            # No explicit Subject: prefix — treat the first non-empty line as the subject.
+            subject = stripped
+        body_start = i + 1
+        break
+
+    body = "\n".join(lines[body_start:]).strip()
+    # If the model put everything on/after the subject line with no body, fall back
+    # to using the whole text as the body so nothing is lost.
+    if not body:
+        body = text
+    return {"subject": subject, "body": body}
+
+
+def generate_coaching_email(review: dict, sign_off_name: str = "") -> dict:
+    """Draft a coaching email from the coach to the advisor about this call.
+
+    Feeds the model both the official review (scores + written feedback) and the
+    full transcript so it can quote the prospect's actual words and give exact
+    follow-up phrasing. ``sign_off_name`` is the coach's own name, injected so the
+    email is signed correctly (never hardcoded). Returns ``{"subject", "body"}``.
+
+    The model returns plain text (a ``Subject:`` line then the body); a generous
+    ``max_tokens`` prevents the email being truncated mid-draft.
+
+    Raises LLMUnavailableError if no API key is configured.
+    """
+    if not get_llm_api_key():
+        raise LLMUnavailableError("No LLM API key is configured.")
+
+    metadata = review.get("metadata") or {}
+    transcript_text = _format_transcript_labeled(
+        review.get("transcript") or [], review.get("speaker_map") or {}
+    )
+    review_section = _format_review_results(review.get("review"))
+
+    system_prompt = load_prompt("coaching_email.system")
+    user_prompt = load_prompt("coaching_email.user").format(
+        sign_off_name=(sign_off_name or "").strip() or "your coach",
+        advisor_name=(metadata.get("advisor_name") or "").strip() or "the advisor",
+        prospect_name=(metadata.get("prospect_name") or "").strip() or "the prospect",
+        call_outcome=(metadata.get("call_outcome") or "").strip() or "not recorded",
+        review_section=review_section,
+        transcript=transcript_text,
+    )
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=user_prompt),
+    ]
+    llm = get_llm(temperature=0.4, max_tokens=2048)
+    content = llm.invoke(messages).content.strip()
+    return _split_email_text(content)
+
+
 def review_call(transcript: list[dict], criteria: list[dict]) -> dict:
     """
     Generate a structured review for a call transcript.
@@ -376,8 +503,13 @@ def review_call(transcript: list[dict], criteria: list[dict]) -> dict:
     api_key = get_llm_api_key()
 
     if not api_key:
-        logger.warning("LLM API key is not set. Returning stub review for development.")
-        return STUB_REVIEW
+        if ALLOW_STUB_PIPELINE:
+            logger.warning("LLM API key is not set. Returning stub review (ALLOW_STUB_PIPELINE=true).")
+            return STUB_REVIEW
+        raise LLMUnavailableError(
+            "LLM review not configured: no API key is set. "
+            "Set ALLOW_STUB_PIPELINE=true to use stub data in development."
+        )
 
     if not criteria:
         logger.warning("No criteria provided. Returning stub review.")
@@ -390,49 +522,20 @@ def review_call(transcript: list[dict], criteria: list[dict]) -> dict:
         summary_llm = get_llm(temperature=0.3)
 
         transcript_text = _format_transcript(transcript)
-        categories = []
 
-        for criterion in criteria:
-            max_score = criterion.get("max_score", 10)
-            system_prompt = load_prompt("criterion.system").format(
-                description=criterion["description"],
-                success_condition=criterion["success_condition"],
-                max_score=max_score,
-            )
-            messages = [
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=load_prompt("criterion.user").format(transcript=transcript_text)),
+        # Evaluate all criteria in parallel (I/O-bound LLM calls).  Results are
+        # collected in original submission order so categories[i] == criteria[i],
+        # which is relied on by pdf_export.py, ReviewResults.jsx, and the
+        # major-focus criterion-index logic.  Any criterion failure propagates
+        # immediately (f.result() raises), failing the whole review.
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=min(_CRITERION_MAX_WORKERS, len(criteria))
+        ) as ex:
+            futures = [
+                ex.submit(_evaluate_criterion, c, transcript_text, criterion_llm)
+                for c in criteria
             ]
-
-            # Per-criterion retry: invoke once; on parse failure, re-invoke once more
-            # before propagating. After two failures the whole review fails (user's
-            # chosen semantics — Retry button already exists in the UI).
-            parsed = None
-            last_exc = None
-            for attempt in range(2):
-                try:
-                    response = criterion_llm.invoke(messages)
-                    parsed = _parse_criterion_json(response.content.strip())
-                    break
-                except (ValueError, _json.JSONDecodeError) as exc:
-                    last_exc = exc
-                    logger.warning(
-                        "Criterion %r parse failure (attempt %d/2): %s",
-                        criterion.get("title", ""), attempt + 1, exc,
-                    )
-            if parsed is None:
-                raise ValueError(
-                    f"Criterion {criterion.get('title', '')!r} failed after 2 attempts: {last_exc}"
-                )
-
-            categories.append(
-                {
-                    "name": criterion.get("title") or criterion["description"][:60],
-                    "score": int(parsed["score"]),
-                    "max_score": max_score,
-                    "feedback": parsed["feedback"],
-                }
-            )
+            categories = [f.result() for f in futures]
 
         scores_text = "\n".join(
             f"- {c['name']}: {c['score']}/{c.get('max_score', 10)} — {c['feedback']}"

@@ -50,11 +50,18 @@ def test_retry_failed_review_enqueues_and_resets(monkeypatch):
     result = asyncio.run(retry_review_by_id("rev-1", user=BDS))
 
     task_mock.delay.assert_called_once_with("rev-1", "tpl-1")
-    status_mock.assert_awaited_once()
-    args, kwargs = status_mock.await_args
-    assert args[0] == "rev-1" and args[1] == "pending"
-    assert kwargs.get("celery_task_id") == "task-123"
-    assert kwargs.get("clear_error_message") is True
+    # Fix 3.9: update_review_status is now called twice.
+    # First: write "pending" + clear_error BEFORE enqueueing.
+    # Second: write celery_task_id AFTER enqueueing (guard_pending=True).
+    assert status_mock.await_count == 2
+    first_args, first_kwargs = status_mock.await_args_list[0]
+    assert first_args[0] == "rev-1" and first_args[1] == "pending"
+    assert first_kwargs.get("clear_error_message") is True
+    assert "celery_task_id" not in first_kwargs
+    second_args, second_kwargs = status_mock.await_args_list[1]
+    assert second_args[0] == "rev-1" and second_args[1] == "pending"
+    assert second_kwargs.get("celery_task_id") == "task-123"
+    assert second_kwargs.get("guard_pending") is True
     assert result is review  # returns the re-fetched review
 
 

@@ -1,0 +1,7 @@
+Coach (sign the email as this person): {sign_off_name}
+Advisor (the person you are coaching): {advisor_name}
+Prospect: {prospect_name}
+Call outcome: {call_outcome}
+
+{review_section}Transcript:
+{transcript}

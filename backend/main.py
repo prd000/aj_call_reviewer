@@ -2,10 +2,11 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
+from modules.auth import get_current_user
 from modules.templates import migrate_default_template
 from routers import upload, reviews, templates, management, tags
 
@@ -31,11 +32,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(upload.router, prefix="/api")
-app.include_router(reviews.router, prefix="/api")
-app.include_router(tags.router, prefix="/api")
-app.include_router(templates.router, prefix="/api")
-app.include_router(management.router, prefix="/api")
+_auth = [Depends(get_current_user)]
+app.include_router(upload.router, prefix="/api", dependencies=_auth)
+app.include_router(reviews.router, prefix="/api", dependencies=_auth)
+app.include_router(tags.router, prefix="/api", dependencies=_auth)
+app.include_router(templates.router, prefix="/api", dependencies=_auth)
+app.include_router(management.router, prefix="/api", dependencies=_auth)
 
 
 @app.get("/health")

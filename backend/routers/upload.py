@@ -1,4 +1,5 @@
 import logging
+import os
 
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
 
@@ -16,6 +17,9 @@ from modules.user_profiles import get_profile
 from tasks import process_review_task
 
 logger = logging.getLogger(__name__)
+
+# Default 200 MB; override via MAX_UPLOAD_SIZE_BYTES env var.
+_MAX_UPLOAD_SIZE_BYTES = int(os.environ.get("MAX_UPLOAD_SIZE_BYTES", str(200 * 1024 * 1024)))
 
 router = APIRouter()
 
@@ -76,6 +80,11 @@ async def upload_call(
         advisor = await get_profile(advisor_user_id)
         if advisor is None:
             raise HTTPException(status_code=400, detail="Advisor not found.")
+        if advisor.get("firm_id") != firm_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Advisor does not belong to the selected firm.",
+            )
 
         effective_firm_id = firm_id
         effective_firm_name = firm["name"]
@@ -107,7 +116,18 @@ async def upload_call(
         "criteria": template.get("criteria", []),
     }
 
-    file_bytes = await file.read()
+    # Read with a size cap to avoid loading arbitrarily large files into memory.
+    # Read one byte past the limit so we can detect an oversize file before
+    # attempting to upload it to storage.
+    file_bytes = await file.read(_MAX_UPLOAD_SIZE_BYTES + 1)
+    if len(file_bytes) > _MAX_UPLOAD_SIZE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"File exceeds the maximum upload size of "
+                f"{_MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)} MB."
+            ),
+        )
 
     try:
         storage_path = await upload_recording_to_storage(
@@ -128,15 +148,21 @@ async def upload_call(
         await delete_recording_from_storage(storage_path)
         raise HTTPException(status_code=500, detail="Failed to save review record.")
 
+    # Status is already "pending" from save_review. Enqueue first; write
+    # celery_task_id after. guard_pending ensures a fast-starting worker that
+    # has already advanced status won't be regressed back to "pending".
     try:
         task = process_review_task.delay(record["id"], effective_template_id)
-        await update_review_status(record["id"], "pending", celery_task_id=task.id)
     except Exception as exc:
         logger.error("Failed to enqueue task for review %s: %s", record["id"], exc)
         await update_review_status(
             record["id"],
             "failed",
             error_message="Failed to queue processing task — Redis may be unavailable.",
+        )
+    else:
+        await update_review_status(
+            record["id"], "pending", celery_task_id=task.id, guard_pending=True
         )
 
     logger.info(

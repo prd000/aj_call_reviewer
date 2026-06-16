@@ -1,7 +1,11 @@
 """
-Golden byte-equality test: the prompt files must reproduce the exact strings
-that were previously hardcoded as constants in reviewer.py.
+Format-contract tests: each prompt file must satisfy its API contract — the
+right placeholders are substituted, the values appear in the output, and no
+unfilled single-brace identifiers remain. Tests that previously used byte-
+equality comparisons against old hardcoded constants have been converted here
+because the prompts have evolved past those snapshots.
 """
+import re
 import sys
 from pathlib import Path
 
@@ -10,39 +14,16 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from prompts import load_prompt
 
-# --- originals captured verbatim from reviewer.py before refactor ---
-
-_SPEAKER_ID_PROMPT = (
-    "You are analyzing a financial advisor sales call transcript. "
-    "Based on the content of these opening segments, identify which speaker number is the "
-    "financial advisor/salesperson and which is the prospect/client. "
-    "Speakers are identified by their 0-indexed speaker number. "
-    "Respond with a JSON object in this exact format:\n"
-    '{{"advisor": <speaker_number>, "prospect": <speaker_number>}}\n\n'
-    "Do not include anything outside the JSON object."
-)
-
-_CRITERION_PROMPT_TEMPLATE = (
-    "You are a call reviewer for financial advisors. Your current job is to analyze "
-    "this call recording based on the following criteria:\n\n"
-    "Criteria: {description}\n\n"
-    "You know this has been successfully accomplished when: {success_condition}\n\n"
-    "Respond with a JSON object in this exact format:\n"
-    '{{"score": <integer 1-{max_score}>, "feedback": "<2-3 sentences of coaching feedback>"}}\n\n'
-    "Do not include anything outside the JSON object."
-)
-
-_SUMMARY_PROMPT = (
-    "You are a sales coach for financial advisors. "
-    "Given the following call transcript and category scores, "
-    "write a 3-4 sentence overall summary of the advisor's performance. "
-    "Be specific, constructive, and actionable. "
-    "Return only the summary text, no JSON."
-)
-
 
 def test_speaker_id_system_raw():
-    assert load_prompt("speaker_id.system") == _SPEAKER_ID_PROMPT
+    # speaker_id.system takes no format args. Calling .format() with no args
+    # verifies there are no unfilled single-brace placeholders (double braces
+    # {{ / }} are literal JSON examples and are fine).
+    text = load_prompt("speaker_id.system")
+    assert text
+    text.format()  # raises KeyError on any unfilled {placeholder}
+    assert "advisor" in text.lower()
+    assert "prospect" in text.lower()
 
 
 def test_speaker_id_user_formatted():
@@ -53,10 +34,16 @@ def test_speaker_id_user_formatted():
 
 
 def test_criterion_system_formatted():
-    args = dict(description="D", success_condition="S", max_score=10)
-    from_file = load_prompt("criterion.system").format(**args)
-    original = _CRITERION_PROMPT_TEMPLATE.format(**args)
-    assert from_file == original
+    # criterion.system takes {description}, {success_condition}, {max_score}.
+    # After formatting, all three values appear and no single-brace identifier
+    # placeholders remain (double-brace JSON examples in the prompt become
+    # literal braces, which is expected).
+    args = dict(description="Test criterion", success_condition="Done when X", max_score=7)
+    out = load_prompt("criterion.system").format(**args)
+    assert "Test criterion" in out
+    assert "Done when X" in out
+    assert "7" in out
+    assert not re.search(r"\{[a-z_]+\}", out), "Unfilled placeholder found after format()"
 
 
 def test_criterion_user_formatted():
@@ -85,7 +72,12 @@ def test_chat_system_formatted():
 
 
 def test_summary_system_raw():
-    assert load_prompt("summary.system") == _SUMMARY_PROMPT
+    # summary.system takes no format args. Verify it loads cleanly with no
+    # unfilled placeholders and mentions "summary" as a key domain term.
+    text = load_prompt("summary.system")
+    assert text
+    text.format()  # raises KeyError on any unfilled {placeholder}
+    assert "summary" in text.lower()
 
 
 def test_summary_user_formatted():
@@ -94,3 +86,36 @@ def test_summary_user_formatted():
     from_file = load_prompt("summary.user").format(transcript=t, scores_text=s)
     original = f"Transcript:\n{t}\n\nCategory Scores:\n{s}"
     assert from_file == original
+
+
+def test_coaching_email_system_raw():
+    # coaching_email.system takes no format args (used raw). .format() with no
+    # args verifies there are no unfilled single-brace placeholders, and the
+    # prompt must keep its JSON output contract and core domain terms.
+    text = load_prompt("coaching_email.system")
+    assert text
+    text.format()  # raises KeyError on any unfilled {placeholder}
+    assert "email" in text.lower()
+    assert "subject" in text.lower() and "body" in text.lower()
+
+
+def test_coaching_email_user_formatted():
+    # Guards the format CONTRACT: every placeholder must be supplied, each value
+    # is substituted in, and no unfilled braces leak through. Keep these kwargs in
+    # sync with reviewer.generate_coaching_email's
+    # load_prompt("coaching_email.user").format(...) call.
+    out = load_prompt("coaching_email.user").format(
+        sign_off_name="Kyle",
+        advisor_name="Jordan",
+        prospect_name="Diana",
+        call_outcome="follow_up_scheduled",
+        review_section="REVIEW_BLOCK\n\n",
+        transcript="TRANSCRIPT_BLOCK",
+    )
+    assert "Kyle" in out
+    assert "Jordan" in out
+    assert "Diana" in out
+    assert "follow_up_scheduled" in out
+    assert "REVIEW_BLOCK" in out
+    assert "TRANSCRIPT_BLOCK" in out
+    assert not re.search(r"\{[a-z_]+\}", out), "Unfilled placeholder found after format()"

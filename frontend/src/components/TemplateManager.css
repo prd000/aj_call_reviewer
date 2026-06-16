@@ -176,3 +176,26 @@
 .template-manager__btn--danger:hover {
   opacity: 0.85;
 }
+
+.template-manager__btn--default {
+  background-color: var(--color-surface-elevated);
+  color: var(--color-muted);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.template-manager__btn--default:hover {
+  background-color: var(--color-hairline);
+  color: var(--color-on-dark);
+}
+
+.template-manager__btn--default--active {
+  background-color: var(--color-primary-disabled);
+  color: var(--color-primary);
+}
+
+.template-manager__btn--default--active:hover {
+  background-color: var(--color-primary-disabled);
+  color: var(--color-primary);
+  opacity: 0.9;
+}
