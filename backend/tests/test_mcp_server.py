@@ -28,10 +28,9 @@ BDS = {"user_id": "u1", "role": "bds_rep", "firm_id": None, "name": "Coach"}
 FA = {"user_id": "u2", "role": "financial_advisor", "firm_id": "f1", "name": "Advisor"}
 
 
-def _ctx(headers, query_params=None):
-    """Fake FastMCP Context exposing request headers/query like the HTTP transport does."""
-    request = types.SimpleNamespace(headers=headers, query_params=(query_params or {}))
-    return types.SimpleNamespace(request_context=types.SimpleNamespace(request=request))
+def _access(token):
+    """Fake AccessToken (the SDK validates it before the tool runs)."""
+    return types.SimpleNamespace(token=token)
 
 
 def _review(rid, advisor="John", firm="Acme", outcome=None, template="Disco", score=6.0, tags=None, status="complete"):
@@ -48,43 +47,28 @@ def _review(rid, advisor="John", firm="Acme", outcome=None, template="Disco", sc
     }
 
 
-# ── _auth ──────────────────────────────────────────────────────────────────────
+# ── _auth (maps the SDK-validated bearer token → user context) ──────────────────
 
 
-def test_auth_resolves_api_key_header():
-    with patch("mcp_server.resolve_api_key", AsyncMock(return_value={"user_id": "u1", "key_id": "k1"})), \
-         patch("mcp_server._user_context_from_profile", AsyncMock(return_value=BDS)), \
-         patch("mcp_server.touch_last_used", AsyncMock()):
-        user = asyncio.run(_auth(_ctx({"x-api-key": "ak_live_tok"})))
+def test_auth_maps_token_to_context():
+    with patch("mcp_server.get_access_token", lambda: _access("cr_at_x")), \
+         patch.object(mcp_server.oauth_provider, "resolve_token_user_id", AsyncMock(return_value="u1")), \
+         patch("mcp_server._user_context_from_profile", AsyncMock(return_value=BDS)):
+        user = asyncio.run(_auth(None))
     assert user == BDS
 
 
-def test_auth_accepts_bearer_tagged_key():
-    with patch("mcp_server.resolve_api_key", AsyncMock(return_value={"user_id": "u1", "key_id": "k1"})), \
-         patch("mcp_server._user_context_from_profile", AsyncMock(return_value=BDS)), \
-         patch("mcp_server.touch_last_used", AsyncMock()):
-        user = asyncio.run(_auth(_ctx({"authorization": "Bearer ak_live_tok"})))
-    assert user["role"] == "bds_rep"
+def test_auth_no_token_raises():
+    with patch("mcp_server.get_access_token", lambda: None):
+        with pytest.raises(RuntimeError, match="Not authenticated"):
+            asyncio.run(_auth(None))
 
 
-def test_auth_accepts_query_param_key():
-    # claude.ai's connector UI has no header field, so the key can ride in the URL.
-    with patch("mcp_server.resolve_api_key", AsyncMock(return_value={"user_id": "u1", "key_id": "k1"})), \
-         patch("mcp_server._user_context_from_profile", AsyncMock(return_value=BDS)), \
-         patch("mcp_server.touch_last_used", AsyncMock()):
-        user = asyncio.run(_auth(_ctx({}, query_params={"api_key": "ak_live_tok"})))
-    assert user["role"] == "bds_rep"
-
-
-def test_auth_missing_key_raises():
-    with pytest.raises(RuntimeError, match="Missing API key"):
-        asyncio.run(_auth(_ctx({})))
-
-
-def test_auth_invalid_key_raises():
-    with patch("mcp_server.resolve_api_key", AsyncMock(return_value=None)):
-        with pytest.raises(RuntimeError, match="Invalid or revoked"):
-            asyncio.run(_auth(_ctx({"x-api-key": "ak_live_bad"})))
+def test_auth_unresolvable_token_raises():
+    with patch("mcp_server.get_access_token", lambda: _access("cr_at_x")), \
+         patch.object(mcp_server.oauth_provider, "resolve_token_user_id", AsyncMock(return_value=None)):
+        with pytest.raises(RuntimeError, match="resolve the authenticated user"):
+            asyncio.run(_auth(None))
 
 
 # ── search_reviews ─────────────────────────────────────────────────────────────

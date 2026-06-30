@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from modules.auth import get_current_user
 from modules.templates import migrate_default_template
 from mcp_server import mcp
-from routers import upload, reviews, templates, management, tags
+from routers import upload, reviews, templates, management, tags, mcp_oauth
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
@@ -56,12 +56,19 @@ app.include_router(tags.router, prefix="/api", dependencies=_auth)
 app.include_router(templates.router, prefix="/api", dependencies=_auth)
 app.include_router(management.router, prefix="/api", dependencies=_auth)
 
-# Remote MCP connector (streamable HTTP). Auth is handled per-tool inside the MCP
-# server via the X-API-Key header, so this mount is NOT behind the JWT `_auth`
-# dependency. Endpoint: <base>/mcp
-app.mount("/mcp", _mcp_app)
+# Browser-facing OAuth consent page for the MCP connector — NOT behind `_auth`
+# (it is the sign-in surface). Routes live under /mcp-oauth/*.
+app.include_router(mcp_oauth.router)
 
 
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+# Remote MCP connector (streamable HTTP) + its OAuth endpoints. Mounted at the
+# host ROOT so the SDK's `.well-known` discovery URLs sit where claude.ai/Cowork
+# look (the MCP endpoint itself is `/mcp`). This MUST be the LAST route added so
+# `/api/*`, `/health`, and `/mcp-oauth/*` match before this catch-all mount.
+# Per-request OAuth bearer auth is enforced by the MCP SDK, so no JWT `_auth` dep.
+app.mount("/", _mcp_app)

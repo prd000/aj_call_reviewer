@@ -1,28 +1,39 @@
 """MCP server exposing Call Reviewer as tools for a Claude connector.
 
-Mounted onto the main FastAPI app (see `main.py`) at `/mcp`, so it shares the
-Railway deploy, env, Supabase client, and the API-key auth. Tools reuse the
-existing router handlers and module functions — visibility/role rules are NOT
+Mounted onto the main FastAPI app (see `main.py`) at the host root so the OAuth
+discovery URLs (`.well-known/*`) land where claude.ai/Cowork look; the MCP
+endpoint itself stays at `/mcp`. Shares the Railway deploy, env, and Supabase
+client. Tools reuse the existing router handlers — visibility/role rules are NOT
 re-implemented here, they come along with the shared handlers.
 
-Auth: every tool resolves the caller from the request's `X-API-Key` header (or a
-`Bearer ak_live_…`) via the same `resolve_api_key` + profile-load path the REST
-API uses, yielding the identical `{user_id, role, firm_id, name}` context.
+Auth: the server is an OAuth 2.1 authorization server (see
+`modules/oauth_provider.py`). The SDK validates the bearer token on every MCP
+request via the provider's `load_access_token` (which also accepts an
+`ak_live_…` API key as a bearer token, so Claude Code/Desktop work with
+`Authorization: Bearer ak_live_…`). Inside a tool, `_auth(ctx)` maps the
+validated token to the same `{user_id, role, firm_id, name}` context the REST
+API uses, so role gates and FA-visibility are unchanged.
 
-NOTE: the MCP transport + connector auth need live verification on Railway; the
-streamable-HTTP session manager lifespan is wired into the app lifespan in main.py.
+NOTE: the claude.ai/Cowork OAuth handshake needs live verification on Railway;
+the streamable-HTTP session-manager lifespan is wired into the app lifespan.
 """
 import base64
 import logging
 import os
 
 from fastapi import HTTPException
+from mcp.server.auth.middleware.auth_context import get_access_token
+from mcp.server.auth.settings import (
+    AuthSettings,
+    ClientRegistrationOptions,
+    RevocationOptions,
+)
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
-from modules.api_keys import KEY_TAG, resolve_api_key, touch_last_used
 from modules.auth import _user_context_from_profile
 from modules.firms import get_firm_users, list_firms as _list_firms
+from modules.oauth_provider import MCP_SCOPE, provider as oauth_provider
 from modules.tags import create_tag as _create_tag, list_tags as _list_tags
 from modules.templates import list_templates as _list_templates
 from modules.user_profiles import get_profile
@@ -63,10 +74,32 @@ if _mcp_hosts:
 else:
     _transport_security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
 
-# streamable_http_path="/" so that mounting the app at "/mcp" yields a clean
-# "/mcp" endpoint (instead of "/mcp/mcp").
+# OAuth: the app is mounted at the host ROOT (see main.py) so the SDK's
+# `.well-known` discovery endpoints sit where claude.ai/Cowork look; the MCP
+# endpoint itself is `streamable_http_path="/mcp"`. PUBLIC_BASE_URL must be the
+# externally-reachable origin so the advertised OAuth URLs are correct.
+_PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
+if not _PUBLIC_BASE_URL:
+    raise RuntimeError(
+        "PUBLIC_BASE_URL must be set (e.g. https://<app>.up.railway.app) for the MCP OAuth server."
+    )
+
+_auth_settings = AuthSettings(
+    issuer_url=_PUBLIC_BASE_URL,
+    resource_server_url=f"{_PUBLIC_BASE_URL}/mcp",
+    client_registration_options=ClientRegistrationOptions(
+        enabled=True, valid_scopes=[MCP_SCOPE], default_scopes=[MCP_SCOPE]
+    ),
+    revocation_options=RevocationOptions(enabled=True),
+    required_scopes=[MCP_SCOPE],
+)
+
 mcp = FastMCP(
-    "call-reviewer", streamable_http_path="/", transport_security=_transport_security
+    "call-reviewer",
+    streamable_http_path="/mcp",
+    transport_security=_transport_security,
+    auth_server_provider=oauth_provider,
+    auth=_auth_settings,
 )
 
 
@@ -74,42 +107,23 @@ mcp = FastMCP(
 
 
 async def _auth(ctx: Context) -> dict:
-    """Resolve the caller from the request's API key, or raise a tool error.
+    """Map the SDK-validated bearer token to the request's user context.
 
-    Looks for the key in (1) the `X-API-Key` header, (2) an `Authorization:
-    Bearer ak_live_…` header, or (3) an `?api_key=` query parameter. The query-
-    param path exists for clients whose connector UI has no header field (e.g.
-    claude.ai's custom-connector dialog) — paste `…/mcp?api_key=ak_live_…` as the
-    URL. Note: a key in the URL can appear in access logs; rotate/revoke as needed.
+    The transport layer already authenticated the token (via the provider's
+    `load_access_token`) before the tool ran; here we resolve that token to a
+    `user_id` and load the same `{user_id, role, firm_id, name}` context the REST
+    API uses — so `require_bds_rep`-style gates and FA-visibility are unchanged.
     """
-    request = getattr(ctx.request_context, "request", None)
-    headers = getattr(request, "headers", None) or {}
-    api_key = headers.get("x-api-key")
-    if not api_key:
-        authz = headers.get("authorization", "") or ""
-        if authz.startswith("Bearer "):
-            cand = authz[len("Bearer "):]
-            if cand.startswith(KEY_TAG):
-                api_key = cand
-    if not api_key and request is not None:
-        try:
-            api_key = request.query_params.get("api_key")
-        except Exception:
-            api_key = None
-    if not api_key:
-        raise RuntimeError(
-            "Missing API key. Set the X-API-Key header (Claude Code/Desktop) or "
-            "append ?api_key=ak_live_… to the MCP URL (claude.ai connector)."
-        )
+    access = get_access_token()
+    if access is None:
+        raise RuntimeError("Not authenticated.")
+    user_id = await oauth_provider.resolve_token_user_id(access.token)
+    if not user_id:
+        raise RuntimeError("Could not resolve the authenticated user for this token.")
     try:
-        resolved = await resolve_api_key(api_key)
-        if not resolved:
-            raise RuntimeError("Invalid or revoked API key.")
-        user = await _user_context_from_profile(resolved["user_id"])
+        return await _user_context_from_profile(user_id)
     except HTTPException as e:
         raise RuntimeError(f"{e.status_code}: {e.detail}") from None
-    await touch_last_used(resolved["key_id"])
-    return user
 
 
 async def _run(awaitable):

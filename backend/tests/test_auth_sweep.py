@@ -18,7 +18,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from main import app
 from modules.auth import get_current_user, require_bds_rep
 
-_SKIP_PATHS = frozenset({"/health", "/openapi.json", "/docs", "/redoc", "/docs/oauth2-redirect"})
+# /mcp-oauth/consent is the MCP OAuth sign-in surface — intentionally public; it
+# authenticates by validating a pasted API key (resolve_api_key), not a JWT. The
+# MCP server's own OAuth/well-known endpoints live under a Starlette Mount (not an
+# APIRoute), so they're already excluded by the isinstance check below.
+_SKIP_PATHS = frozenset({
+    "/health", "/openapi.json", "/docs", "/redoc", "/docs/oauth2-redirect",
+    "/mcp-oauth/consent",
+})
 _AUTH_DEPS = frozenset({get_current_user, require_bds_rep})
 
 
