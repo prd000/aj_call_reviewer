@@ -362,8 +362,12 @@ async def update_review_outcome(review_id: str, call_outcome: str | None) -> Non
 async def upload_recording_to_storage(review_id: str, file_bytes: bytes, filename: str) -> str:
     """Upload a recording to Supabase Storage. Returns the storage path."""
     client = await get_client()
-    safe_name = Path(filename).name
-    path = f"{review_id}/{safe_name}"
+    # Build the key from the unique review_id + a clean extension. Never trust the
+    # raw filename as a storage key — Supabase rejects keys containing `~`, spaces,
+    # and other characters (e.g. Windows 8.3 short names like "VERAZA~1.WAV"). The
+    # human-readable name is preserved separately in the `original_filename` column.
+    ext = Path(filename).suffix.lower()
+    path = f"{review_id}/recording{ext}"
     await client.storage.from_(STORAGE_BUCKET).upload(path=path, file=file_bytes)
     return path
 
