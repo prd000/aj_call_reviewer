@@ -309,6 +309,36 @@ export async function setDefaultTemplate(templateId) {
   return handleResponse(response)
 }
 
+// ── API keys ──────────────────────────────────────────────────────────────────
+
+// Returns the caller's keys (metadata only — never the secret), newest first.
+export async function listApiKeys() {
+  const headers = await authHeaders()
+  const response = await apiFetch(`${BASE_URL}/keys`, { headers })
+  return handleResponse(response)
+}
+
+// Returns { id, label, key_prefix, full_key, created_at }. `full_key` is shown
+// ONCE here and is never recoverable afterward — surface it to the user immediately.
+export async function createApiKey(label) {
+  const headers = { ...(await authHeaders()), 'Content-Type': 'application/json' }
+  const response = await apiFetch(`${BASE_URL}/keys`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ label }),
+  })
+  return handleResponse(response)
+}
+
+export async function revokeApiKey(id) {
+  const headers = await authHeaders()
+  const response = await apiFetch(`${BASE_URL}/keys/${id}`, {
+    method: 'DELETE',
+    headers,
+  })
+  return handleResponse(response)
+}
+
 // ── Firms ─────────────────────────────────────────────────────────────────────
 
 export async function listFirms() {

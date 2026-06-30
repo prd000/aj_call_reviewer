@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import ApiKeysTab from '../components/ApiKeysTab'
 import BdsRepsTab from '../components/BdsRepsTab'
 import FirmsTab from '../components/FirmsTab'
 import './ManagementPage.css'
@@ -26,11 +27,18 @@ export default function ManagementPage() {
           >
             BDS Reps
           </button>
+          <button
+            className={`management-page__tab${activeTab === 'api-keys' ? ' management-page__tab--active' : ''}`}
+            onClick={() => setActiveTab('api-keys')}
+          >
+            API Keys
+          </button>
         </div>
 
         <div className="management-page__content">
           {activeTab === 'firms' && <FirmsTab />}
           {activeTab === 'bds-reps' && <BdsRepsTab />}
+          {activeTab === 'api-keys' && <ApiKeysTab />}
         </div>
       </div>
     </div>
