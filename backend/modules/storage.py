@@ -1,11 +1,13 @@
 import base64
 import json as _json
+import os
 from pathlib import Path
 
 from modules.scoring import overall_score as _compute_overall_score
 from modules.supabase_client import get_client
 
 STORAGE_BUCKET = "recordings"
+_SUPABASE_URL = os.environ["SUPABASE_URL"].rstrip("/")
 
 # Columns selected for the narrow summary list query (no heavy jsonb payloads).
 _SUMMARY_COLUMNS = (
@@ -382,6 +384,36 @@ async def get_recording_signed_url(storage_path: str) -> str:
     if isinstance(result, dict):
         return result.get("signedURL") or result.get("signedUrl", "")
     return str(getattr(result, "signed_url", "") or getattr(result, "signedURL", ""))
+
+
+async def create_recording_upload_url(storage_path: str) -> dict:
+    """Create a pre-signed Supabase Storage upload URL for a recording.
+
+    Lets a client (e.g. an MCP server holding the file) PUT the bytes directly to
+    Supabase, so a large recording never traverses our API. Returns a full
+    ``upload_url`` (ready to PUT to), the upload ``token``, and the ``storage_path``.
+    """
+    client = await get_client()
+    result = await client.storage.from_(STORAGE_BUCKET).create_signed_upload_url(storage_path)
+    if isinstance(result, dict):
+        signed = result.get("signed_url") or result.get("signedURL") or result.get("signedUrl") or ""
+        token = result.get("token", "")
+    else:
+        signed = str(getattr(result, "signed_url", "") or getattr(result, "signedURL", ""))
+        token = str(getattr(result, "token", ""))
+    # The SDK returns a relative path (e.g. "/object/upload/sign/recordings/...");
+    # make it an absolute URL the client can PUT to directly.
+    upload_url = signed if signed.startswith("http") else f"{_SUPABASE_URL}/storage/v1{signed}"
+    return {"upload_url": upload_url, "token": token, "storage_path": storage_path}
+
+
+async def recording_exists(storage_path: str) -> bool:
+    """Return True if an object exists at ``storage_path``. Never raises."""
+    try:
+        client = await get_client()
+        return bool(await client.storage.from_(STORAGE_BUCKET).exists(storage_path))
+    except Exception:
+        return False
 
 
 async def delete_recording_from_storage(storage_path: str) -> None:

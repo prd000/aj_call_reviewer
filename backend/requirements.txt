@@ -13,3 +13,4 @@ supabase>=2.0.0
 celery[redis]>=5.3.0
 PyJWT[crypto]>=2.8.0
 fpdf2>=2.7.0
+mcp>=1.27.0

@@ -136,13 +136,13 @@ def test_hs256_empty_secret_characterization(monkeypatch):
 
 def test_get_current_user_no_header_raises_401():
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(get_current_user(authorization=None))
+        asyncio.run(get_current_user(authorization=None, x_api_key=None))
     assert exc.value.status_code == 401
 
 
 def test_get_current_user_invalid_scheme_raises_401():
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(get_current_user(authorization="Basic abc123"))
+        asyncio.run(get_current_user(authorization="Basic abc123", x_api_key=None))
     assert exc.value.status_code == 401
 
 
@@ -150,7 +150,7 @@ def test_get_current_user_valid_token_returns_user():
     token = _make_token(sub="user-abc")
     fake_profile = {"role": "bds_rep", "is_active": True, "firm_id": None, "name": "Test Rep"}
     with patch("modules.auth.get_profile", AsyncMock(return_value=fake_profile)):
-        user = asyncio.run(get_current_user(authorization=f"Bearer {token}"))
+        user = asyncio.run(get_current_user(authorization=f"Bearer {token}", x_api_key=None))
     assert user["user_id"] == "user-abc"
     assert user["role"] == "bds_rep"
     assert user["name"] == "Test Rep"
@@ -160,7 +160,7 @@ def test_get_current_user_missing_profile_raises_401():
     token = _make_token()
     with patch("modules.auth.get_profile", AsyncMock(return_value=None)):
         with pytest.raises(HTTPException) as exc:
-            asyncio.run(get_current_user(authorization=f"Bearer {token}"))
+            asyncio.run(get_current_user(authorization=f"Bearer {token}", x_api_key=None))
     assert exc.value.status_code == 401
 
 
@@ -169,7 +169,7 @@ def test_get_current_user_deactivated_profile_raises_403():
     fake_profile = {"role": "financial_advisor", "is_active": False, "firm_id": "f1", "name": "Banned"}
     with patch("modules.auth.get_profile", AsyncMock(return_value=fake_profile)):
         with pytest.raises(HTTPException) as exc:
-            asyncio.run(get_current_user(authorization=f"Bearer {token}"))
+            asyncio.run(get_current_user(authorization=f"Bearer {token}", x_api_key=None))
     assert exc.value.status_code == 403
 
 

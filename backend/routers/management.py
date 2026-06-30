@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 
+from modules.api_keys import create_api_key, list_api_keys, revoke_api_key
 from modules.auth import get_current_user, invalidate_profile, require_bds_rep
 from modules.firms import delete_firm, get_firm, get_firm_users, list_firms, save_firm
 from modules.templates import get_template
@@ -53,6 +54,10 @@ class PromoteUserBody(BaseModel):
 
 class DefaultTemplateBody(BaseModel):
     template_id: str | None = None
+
+
+class ApiKeyBody(BaseModel):
+    label: str
 
 
 # ── Firms ─────────────────────────────────────────────────────────────────────
@@ -210,4 +215,28 @@ async def remove_user(user_id: str, user: dict = Depends(require_bds_rep)):
     except Exception as exc:
         logger.error("Failed to delete user %s: %s", user_id, exc)
         raise HTTPException(status_code=400, detail=str(exc))
+    return Response(status_code=204)
+
+
+# ── API keys ──────────────────────────────────────────────────────────────────
+# Any authenticated user mints/revokes keys for THEMSELVES; the key inherits the
+# caller's role. Keys are always scoped to user["user_id"] — never a body-supplied
+# id — so an API key can't be minted for someone else.
+
+
+@router.get("/keys")
+async def get_api_keys(user: dict = Depends(get_current_user)):
+    return await list_api_keys(user["user_id"])
+
+
+@router.post("/keys")
+async def create_new_api_key(body: ApiKeyBody, user: dict = Depends(get_current_user)):
+    # full_key is present in this response ONCE and is never recoverable later.
+    return await create_api_key(user["user_id"], body.label)
+
+
+@router.delete("/keys/{key_id}", status_code=204)
+async def revoke_existing_api_key(key_id: str, user: dict = Depends(get_current_user)):
+    if not await revoke_api_key(key_id, user["user_id"]):
+        raise HTTPException(status_code=404, detail="API key not found")
     return Response(status_code=204)

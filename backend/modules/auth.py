@@ -6,6 +6,7 @@ import httpx
 import jwt
 from fastapi import Depends, HTTPException, Header
 from jwt import ExpiredSignatureError, InvalidTokenError, PyJWKClient
+from modules.api_keys import KEY_TAG, resolve_api_key, touch_last_used
 from modules.user_profiles import get_profile
 
 logger = logging.getLogger(__name__)
@@ -96,12 +97,15 @@ def _validate_token(token: str) -> str:
     return sub
 
 
-async def get_current_user(authorization: str | None = Header(None)):
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
-    token = authorization.removeprefix("Bearer ")
-    user_id = _validate_token(token)
+async def _user_context_from_profile(user_id: str) -> dict:
+    """Load the profile (via the short-TTL cache) and return the request context.
 
+    Shared by the JWT and API-key auth paths so both produce a byte-identical
+    ``{user_id, role, firm_id, name}`` dict — which is exactly why ``require_bds_rep``
+    and the FA-visibility checks work unchanged for either credential type.
+
+    Raises 403 if deactivated, 401 if no profile, 503 on transient Supabase errors.
+    """
     # Check the short-TTL cache before hitting Supabase.
     now = time.monotonic()
     cached = _profile_cache.get(user_id)
@@ -138,6 +142,40 @@ async def get_current_user(authorization: str | None = Header(None)):
         "firm_id": p.get("firm_id"),
         "name": p["name"],
     }
+
+
+async def get_current_user(
+    authorization: str | None = Header(None),
+    x_api_key: str | None = Header(None),
+):
+    """Authenticate via either a Supabase JWT or an API key, returning one context shape.
+
+    API key is taken from the ``X-API-Key`` header, or from an ``Authorization: Bearer``
+    value tagged with ``KEY_TAG``. Otherwise the existing JWT path runs unchanged.
+    """
+    api_key = x_api_key
+    if not api_key and authorization and authorization.startswith("Bearer "):
+        candidate = authorization.removeprefix("Bearer ")
+        if candidate.startswith(KEY_TAG):
+            api_key = candidate
+
+    if api_key:
+        try:
+            resolved = await resolve_api_key(api_key)
+        except _TRANSIENT_EXCEPTIONS as e:
+            logger.warning("Transient Supabase error resolving API key: %r", e)
+            raise HTTPException(status_code=503, detail="Auth service temporarily unavailable")
+        if resolved is None:
+            raise HTTPException(status_code=401, detail="Invalid API key")
+        ctx = await _user_context_from_profile(resolved["user_id"])
+        await touch_last_used(resolved["key_id"])
+        return ctx
+
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+    token = authorization.removeprefix("Bearer ")
+    user_id = _validate_token(token)
+    return await _user_context_from_profile(user_id)
 
 
 def require_bds_rep(user: dict = Depends(get_current_user)):

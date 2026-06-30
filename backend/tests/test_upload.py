@@ -232,6 +232,82 @@ def test_save_review_failure_deletes_orphan_recording(bds_client):
     delete_mock.assert_awaited_once_with("path/rec.mp3")
 
 
+# ---------------------------------------------------------------------------
+# Pre-signed upload (/uploads/presign) + /upload-from-storage (MCP path)
+# ---------------------------------------------------------------------------
+
+_VALID_STAGED_PATH = "staged/11111111-1111-4111-8111-111111111111/recording.mp3"
+
+
+def test_presign_returns_upload_url(bds_client):
+    signed = {"upload_url": "https://x.supabase.co/storage/v1/object/upload/sign/recordings/staged/abc?token=t",
+              "token": "t", "storage_path": "staged/abc/recording.mp3"}
+    with patch("routers.upload.create_recording_upload_url", AsyncMock(return_value=signed)):
+        resp = bds_client.post("/api/uploads/presign", json={"filename": "call.mp3"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["upload_url"].startswith("https://")
+    assert "token" in body and "storage_path" in body
+
+
+def test_presign_rejects_bad_file_type(bds_client):
+    resp = bds_client.post("/api/uploads/presign", json={"filename": "notes.txt"})
+    assert resp.status_code == 400
+    assert "Unsupported file type" in resp.json()["detail"]
+
+
+def test_upload_from_storage_rejects_bad_path(bds_client):
+    resp = bds_client.post("/api/upload-from-storage", json={
+        "storage_path": "../etc/passwd", "filename": "call.mp3", "prospect_name": "Bob",
+        "firm_id": "firm-a", "advisor_user_id": "a1", "template_id": "t1",
+    })
+    assert resp.status_code == 400
+    assert "storage path" in resp.json()["detail"].lower()
+
+
+def test_upload_from_storage_missing_object_returns_400(bds_client):
+    with patch("routers.upload.recording_exists", AsyncMock(return_value=False)):
+        resp = bds_client.post("/api/upload-from-storage", json={
+            "storage_path": _VALID_STAGED_PATH, "filename": "call.mp3", "prospect_name": "Bob",
+            "firm_id": "firm-a", "advisor_user_id": "a1", "template_id": "t1",
+        })
+    assert resp.status_code == 400
+    assert "not found in storage" in resp.json()["detail"].lower()
+
+
+def test_upload_from_storage_happy_path_enqueues(bds_client):
+    task_mock = MagicMock()
+    task_mock.delay.return_value = MagicMock(id="task-fs")
+    with (
+        patch("routers.upload.recording_exists", AsyncMock(return_value=True)),
+        patch("routers.upload.get_firm", AsyncMock(return_value=FAKE_FIRM)),
+        patch("routers.upload.get_profile", AsyncMock(return_value=FAKE_ADVISOR)),
+        patch("routers.upload.get_template", AsyncMock(return_value=FAKE_TEMPLATE)),
+        patch("routers.upload.save_review", AsyncMock()),
+        patch("routers.upload.update_review_status", AsyncMock()),
+        patch("routers.upload.upload_recording_to_storage", AsyncMock()) as up_mock,
+        patch("routers.upload.process_review_task", task_mock),
+    ):
+        resp = bds_client.post("/api/upload-from-storage", json={
+            "storage_path": _VALID_STAGED_PATH, "filename": "call.mp3", "prospect_name": "Bob",
+            "firm_id": "firm-a", "advisor_user_id": "a1", "template_id": "t1",
+        })
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "pending"
+    task_mock.delay.assert_called_once()
+    # The bytes are already in storage; we must NOT re-upload them.
+    up_mock.assert_not_called()
+
+
+def test_upload_from_storage_bds_missing_firm_returns_400(bds_client):
+    with patch("routers.upload.recording_exists", AsyncMock(return_value=True)):
+        resp = bds_client.post("/api/upload-from-storage", json={
+            "storage_path": _VALID_STAGED_PATH, "filename": "call.mp3", "prospect_name": "Bob",
+        })
+    assert resp.status_code == 400
+    assert "firm_id" in resp.json()["detail"]
+
+
 def test_enqueue_failure_marks_review_failed(bds_client):
     """When process_review_task.delay raises, update_review_status is called with 'failed'."""
     status_mock = AsyncMock()
