@@ -74,7 +74,14 @@ mcp = FastMCP(
 
 
 async def _auth(ctx: Context) -> dict:
-    """Resolve the caller from the request's API key, or raise a tool error."""
+    """Resolve the caller from the request's API key, or raise a tool error.
+
+    Looks for the key in (1) the `X-API-Key` header, (2) an `Authorization:
+    Bearer ak_live_…` header, or (3) an `?api_key=` query parameter. The query-
+    param path exists for clients whose connector UI has no header field (e.g.
+    claude.ai's custom-connector dialog) — paste `…/mcp?api_key=ak_live_…` as the
+    URL. Note: a key in the URL can appear in access logs; rotate/revoke as needed.
+    """
     request = getattr(ctx.request_context, "request", None)
     headers = getattr(request, "headers", None) or {}
     api_key = headers.get("x-api-key")
@@ -84,8 +91,16 @@ async def _auth(ctx: Context) -> dict:
             cand = authz[len("Bearer "):]
             if cand.startswith(KEY_TAG):
                 api_key = cand
+    if not api_key and request is not None:
+        try:
+            api_key = request.query_params.get("api_key")
+        except Exception:
+            api_key = None
     if not api_key:
-        raise RuntimeError("Missing API key. Set X-API-Key (your ak_live_… key) on the connector.")
+        raise RuntimeError(
+            "Missing API key. Set the X-API-Key header (Claude Code/Desktop) or "
+            "append ?api_key=ak_live_… to the MCP URL (claude.ai connector)."
+        )
     try:
         resolved = await resolve_api_key(api_key)
         if not resolved:

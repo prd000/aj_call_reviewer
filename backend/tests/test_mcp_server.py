@@ -28,9 +28,9 @@ BDS = {"user_id": "u1", "role": "bds_rep", "firm_id": None, "name": "Coach"}
 FA = {"user_id": "u2", "role": "financial_advisor", "firm_id": "f1", "name": "Advisor"}
 
 
-def _ctx(headers):
-    """Fake FastMCP Context exposing request headers like the HTTP transport does."""
-    request = types.SimpleNamespace(headers=headers)
+def _ctx(headers, query_params=None):
+    """Fake FastMCP Context exposing request headers/query like the HTTP transport does."""
+    request = types.SimpleNamespace(headers=headers, query_params=(query_params or {}))
     return types.SimpleNamespace(request_context=types.SimpleNamespace(request=request))
 
 
@@ -64,6 +64,15 @@ def test_auth_accepts_bearer_tagged_key():
          patch("mcp_server._user_context_from_profile", AsyncMock(return_value=BDS)), \
          patch("mcp_server.touch_last_used", AsyncMock()):
         user = asyncio.run(_auth(_ctx({"authorization": "Bearer ak_live_tok"})))
+    assert user["role"] == "bds_rep"
+
+
+def test_auth_accepts_query_param_key():
+    # claude.ai's connector UI has no header field, so the key can ride in the URL.
+    with patch("mcp_server.resolve_api_key", AsyncMock(return_value={"user_id": "u1", "key_id": "k1"})), \
+         patch("mcp_server._user_context_from_profile", AsyncMock(return_value=BDS)), \
+         patch("mcp_server.touch_last_used", AsyncMock()):
+        user = asyncio.run(_auth(_ctx({}, query_params={"api_key": "ak_live_tok"})))
     assert user["role"] == "bds_rep"
 
 
